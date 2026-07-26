@@ -3,7 +3,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type AuthUser = { id: string; firstName: string; lastName: string; email: string; emailVerifiedAt: string | null; createdAt: string; updatedAt: string };
-export type OnboardingState = { required: boolean; organizations: Array<{ id: string; name: string; slug: string }>; currentOrganization: { id: string; name: string; slug: string } | null; currentWorkspace: { id: string; name: string; slug: string } | null };
+export type WorkspaceSummary = { id: string; organizationId: string; name: string; slug: string; createdAt?: string; updatedAt?: string; members?: Array<{ role: string }> };
+export type OrganizationSummary = { id: string; name: string; slug: string; createdAt?: string; updatedAt?: string; workspaces?: WorkspaceSummary[]; members?: Array<{ role: string }> };
+export type OnboardingState = { required: boolean; organizations: OrganizationSummary[]; currentOrganization: OrganizationSummary | null; currentWorkspace: WorkspaceSummary | null };
 type Credentials = { email: string; password: string };
 type Registration = Credentials & { firstName: string; lastName: string };
 export type OnboardingInput = { organizationName: string; organizationSlug: string; workspaceName: string; workspaceSlug: string; industry: string; teamSize: string };

@@ -49,6 +49,7 @@ model User {
   organizationMemberships OrganizationMember[]
   workspaceMemberships WorkspaceMember[]
   refreshTokens RefreshToken[]
+  sentWorkspaceInvitations WorkspaceInvitation[] @relation("InvitationInviter")
 }
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -60,6 +61,7 @@ model Organization {
   updatedAt DateTime @updatedAt
   members OrganizationMember[]
   workspaces Workspace[]
+  invitations WorkspaceInvitation[]
   @@unique([slug])
 }
 model OrganizationMember {
@@ -83,6 +85,7 @@ model Workspace {
   updatedAt DateTime @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members WorkspaceMember[]
+  invitations WorkspaceInvitation[]
   @@unique([organizationId, slug])
   @@index([organizationId])
 }
@@ -97,6 +100,27 @@ model WorkspaceMember {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([workspaceId, userId])
   @@index([userId])
+}
+
+model WorkspaceInvitation {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  organizationId String @db.Uuid
+  invitedByUserId String @db.Uuid
+  email String
+  role WorkspaceRole
+  tokenHash String @unique
+  expiresAt DateTime
+  acceptedAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("InvitationInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  @@index([workspaceId, email])
+  @@index([organizationId])
+  @@index([expiresAt])
 }
 model RefreshToken {
   id String @id @default(uuid()) @db.Uuid

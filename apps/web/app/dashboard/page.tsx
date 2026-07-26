@@ -1,14 +1,18 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '../auth-provider';
+import { useDashboard } from './dashboard-context';
 
-export default function Dashboard() {
-  const router = useRouter();
-  const { user, onboarding, loading, logout } = useAuth();
-  if (loading) return <main className="dashboard-shell"><div className="dashboard-loading">Loading your workspace…</div></main>;
-  if (!user) { if (typeof window !== 'undefined') router.replace('/login'); return <main className="dashboard-shell"><div className="dashboard-loading">Redirecting to sign in…</div></main>; }
-  if (onboarding?.required) { if (typeof window !== 'undefined') router.replace('/onboarding'); return <main className="dashboard-shell"><div className="dashboard-loading">Preparing your workspace…</div></main>; }
-  async function signOut(): Promise<void> { await logout(); router.replace('/login'); }
-  return <main className="dashboard-shell"><header className="dashboard-header"><div className="brand"><span className="brand-mark">R</span><span>resolve<span className="brand-accent">ai</span></span></div><nav aria-label="Dashboard navigation"><a className="dashboard-nav-active" href="/dashboard">Overview</a><a href="/dashboard/organizations">Organizations</a><a href="/dashboard/settings">Settings</a></nav><div className="dashboard-account"><div className="dashboard-avatar">{user.firstName[0]}{user.lastName[0]}</div><div><strong>{user.firstName} {user.lastName}</strong><small>{user.email}</small></div><button type="button" onClick={signOut}>Log out</button></div></header><section className="dashboard-content"><div className="dashboard-context"><span>Organization</span><strong>{onboarding?.currentOrganization?.name}</strong><span>Workspace</span><strong>{onboarding?.currentWorkspace?.name}</strong></div><p className="eyebrow">Overview</p><h1>Good morning, {user.firstName}.</h1><p className="dashboard-lede">Your ResolveAI workspace is ready.</p><div className="dashboard-empty"><span className="dashboard-empty-icon">✦</span><h2>Your workspace is ready</h2><p>Start shaping the support experience for your team.</p><div className="dashboard-next-steps"><span>Add knowledge <small>Coming next</small></span><span>Configure AI agent <small>Coming next</small></span><span>Invite teammates <small>Coming next</small></span><span>Install chat widget <small>Coming next</small></span></div></div></section></main>;
+const nextSteps = [
+  ['Add knowledge', 'Give your future AI agent the context it needs to answer customers clearly.', '/dashboard/knowledge'],
+  ['Configure AI agent', 'Shape tone, escalation rules, and the support experience for your team.', '/dashboard/ai-agent'],
+  ['Invite teammates', 'Bring your support team into the workspace when collaboration is ready.', '/dashboard/team'],
+  ['Install chat widget', 'Connect ResolveAI to your customer-facing support surface.', '/dashboard/inbox'],
+] as const;
+
+export default function DashboardOverview() {
+  const { user } = useAuth();
+  const { currentOrganization, currentWorkspace } = useDashboard();
+  return <section className="overview-page"><div className="overview-welcome"><p className="eyebrow"><span className="eyebrow-dot" /> Onboarding complete</p><h2>Good morning, {user?.firstName}.</h2><p>Your workspace is ready. Take the next step when you’re ready.</p></div><div className="overview-context"><div><span>Organization</span><strong>{currentOrganization?.name ?? 'Loading…'}</strong></div><div><span>Workspace</span><strong>{currentWorkspace?.name ?? 'Loading…'}</strong></div><div><span>Environment</span><strong>Ready to configure</strong></div></div><div className="section-heading"><div><p className="eyebrow">Next steps</p><h3>Build your support foundation</h3></div><span className="section-hint">Features will unlock as you configure your workspace.</span></div><div className="next-step-grid">{nextSteps.map(([title, description, href], index) => <Link className="next-step-card" href={href} key={title}><span className="step-number">0{index + 1}</span><h3>{title}</h3><p>{description}</p><span className="coming-next">Coming next <span>↗</span></span></Link>)}</div></section>;
 }

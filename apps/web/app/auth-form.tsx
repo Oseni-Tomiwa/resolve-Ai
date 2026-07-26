@@ -35,7 +35,9 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     event.preventDefault(); setError(''); setFieldError(''); if (!validate()) return; setIsSubmitting(true);
     try {
       if (isRegister) await register({ firstName: values.firstName.trim(), lastName: values.lastName.trim(), email: values.email.trim(), password: values.password }); else await login({ email: values.email.trim(), password: values.password });
-      router.push(isRegister || onboarding?.required ? '/onboarding' : '/dashboard');
+      const invitationToken = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('invitation');
+      if (invitationToken) await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1'}/workspace-invitations/accept`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: invitationToken }) }).then(async (response) => { const body = await response.json() as { success: boolean; message?: string }; if (!response.ok || !body.success) throw new Error(body.message ?? 'Unable to accept invitation.'); });
+      router.push(invitationToken ? '/dashboard' : (isRegister || onboarding?.required ? '/onboarding' : '/dashboard'));
     } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Unable to connect. Please try again.'); } finally { setIsSubmitting(false); }
   }
 
