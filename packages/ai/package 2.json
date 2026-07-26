@@ -1,0 +1,1 @@
+{ "name": "@resolveai/ai", "version": "0.1.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "scripts": { "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "echo 'ai tests pending'" }, "devDependencies": { "typescript": "^5.7.2" } }

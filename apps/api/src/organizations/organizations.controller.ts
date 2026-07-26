@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { OrganizationDto } from './dto';
-import type { OrganizationsService } from './organizations.service';
+import { OrganizationsService } from './organizations.service';
 type RequestWithUser = { user: { sub: string } };
 @Controller('organizations') @UseGuards(JwtAuthGuard)
 export class OrganizationsController {

@@ -1,0 +1,1 @@
+{ "name": "@resolveai/config", "version": "0.1.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "scripts": { "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "echo 'config tests pending'" }, "dependencies": { "zod": "^3.24.1" }, "devDependencies": { "typescript": "^5.7.2" } }

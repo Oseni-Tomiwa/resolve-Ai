@@ -2,5 +2,5 @@
   "extends": "../../packages/typescript-config/nest.json",
   "compilerOptions": { "outDir": "./dist", "rootDir": "./src", "noEmit": true },
   "include": ["./src/**/*.ts"],
-  "exclude": ["./node_modules", "./dist", "./build", "./coverage"]
+  "exclude": ["./node_modules/**", "./dist/**", "./build/**", "./coverage/**", "./test/**", "./**/*.spec.ts", "./**/*.test.ts"]
 }
