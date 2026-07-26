@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import type { OrganizationDto } from './dto';
+// Nest validation and dependency injection need these constructors at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { OrganizationDto } from './dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { OrganizationsService } from './organizations.service';
 type RequestWithUser = { user: { sub: string } };
 @Controller('organizations') @UseGuards(JwtAuthGuard)

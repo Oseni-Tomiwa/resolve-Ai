@@ -1,1 +1,3 @@
-export default function Register() { return <main style={{ maxWidth: 420, margin: '80px auto', padding: 24 }}><h1>Create your account</h1><p>Start your first support workspace.</p><form style={{ display: 'grid', gap: 16 }}><input aria-label="First name" placeholder="First name" /><input aria-label="Last name" placeholder="Last name" /><input aria-label="Email" placeholder="you@company.com" type="email" /><input aria-label="Password" placeholder="Password" type="password" /><button type="submit">Create account</button></form></main>; }
+import { AuthForm } from '../auth-form';
+
+export default function Register() { return <AuthForm mode="register" />; }

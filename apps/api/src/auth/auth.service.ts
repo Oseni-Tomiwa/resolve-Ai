@@ -19,5 +19,11 @@ export class AuthService {
   private async persistRefresh(userId: string, token: string): Promise<void> { await this.db.refreshToken.create({ data: { userId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } }); }
   async refresh(token: string): Promise<Tokens> { const stored = await this.db.refreshToken.findUnique({ where: { tokenHash: hashToken(token) } }); if (!stored || stored.revokedAt || stored.expiresAt < new Date()) throw new UnauthorizedException('Invalid refresh token'); const next = this.issueTokens(stored.userId); await this.db.$transaction([this.db.refreshToken.update({ where: { id: stored.id }, data: { revokedAt: new Date() } }), this.db.refreshToken.create({ data: { userId: stored.userId, tokenHash: hashToken(next.refreshToken), expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } })]); return next; }
   async logout(token: string): Promise<void> { await this.db.refreshToken.updateMany({ where: { tokenHash: hashToken(token), revokedAt: null }, data: { revokedAt: new Date() } }); }
-  async me(userId: string): Promise<PublicUser> { const user = await this.db.user.findUnique({ where: { id: userId } }); if (!user) throw new UnauthorizedException('Unauthorized'); return publicUser(user); }
+  async me(userId: string) {
+    const user = await this.db.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('Unauthorized');
+    const memberships = await this.db.organizationMember.findMany({ where: { userId }, include: { organization: { include: { workspaces: { where: { members: { some: { userId } } }, orderBy: { createdAt: 'asc' } } } } }, orderBy: { createdAt: 'desc' } });
+    const currentOrganization = memberships[0]?.organization ?? null;
+    return { user: publicUser(user), onboarding: { required: memberships.length === 0, organizations: memberships.map(({ organization }) => organization), currentOrganization, currentWorkspace: currentOrganization?.workspaces[0] ?? null } };
+  }
 }

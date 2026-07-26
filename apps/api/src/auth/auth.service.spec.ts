@@ -3,7 +3,7 @@ jest.mock('argon2', () => ({ __esModule: true, hash: jest.fn(), verify: jest.fn(
 jest.mock('jsonwebtoken', () => ({ __esModule: true, sign: jest.fn() }));
 // Load the service after registering factories for its native and token dependencies.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { AuthService } = require('./auth.service') as typeof import('./auth.service');
+const { AuthService } = require('./auth.service');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockedArgon2 = require('argon2') as { hash: jest.Mock; verify: jest.Mock };
 // eslint-disable-next-line @typescript-eslint/no-require-imports

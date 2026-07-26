@@ -19,6 +19,24 @@ enum WorkspaceRole {
   VIEWER
 }
 
+enum OrganizationIndustry {
+  SAAS
+  ECOMMERCE
+  FINANCIAL_SERVICES
+  EDUCATION
+  HEALTHCARE
+  PROFESSIONAL_SERVICES
+  OTHER
+}
+
+enum OrganizationTeamSize {
+  JUST_ME
+  TWO_TO_TEN
+  ELEVEN_TO_FIFTY
+  FIFTY_ONE_TO_TWO_HUNDRED
+  TWO_HUNDRED_PLUS
+}
+
 model User {
   id String @id @default(uuid()) @db.Uuid
   firstName String
@@ -36,6 +54,8 @@ model Organization {
   id String @id @default(uuid()) @db.Uuid
   name String
   slug String
+  industry OrganizationIndustry?
+  teamSize OrganizationTeamSize?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   members OrganizationMember[]
