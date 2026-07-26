@@ -1,0 +1,13 @@
+
+> @resolveai/api@0.1.0 test /Users/mavery/Documents/New project/resolveai/apps/api
+> jest --runInBand
+
+[1m[2mDetermining test suites to run...[22m[22m[999D[K[1mNo tests found, exiting with code 1[22m
+Run with `--passWithNoTests` to exit with code 0
+In [1m/Users/mavery/Documents/New project/resolveai/apps/api[22m
+  21 files checked.
+  testMatch: [33m**/__tests__/**/*.[jt]s?(x), **/?(*.)+(spec|test).[tj]s?(x)[39m - 0 matches
+  testPathIgnorePatterns: [33m/node_modules/[39m - 21 matches
+  testRegex:  - 0 matches
+Pattern:  - 0 matches
+[41m[30m ELIFECYCLE [39m[49m [31mTest failed. See above for more details.[39m

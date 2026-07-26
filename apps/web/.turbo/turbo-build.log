@@ -1,0 +1,8 @@
+
+> @resolveai/web@0.1.0 build /Users/mavery/Documents/New project/resolveai/apps/web
+> next build
+
+   [1m[38;2;173;127;168m▲ Next.js 15.5.22[39m[22m
+
+ [37m[1m [22m[39m Creating an optimized production build ...
+[41m[30m ELIFECYCLE [39m[49m [31mCommand failed with exit code 130.[39m

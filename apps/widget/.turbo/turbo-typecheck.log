@@ -1,0 +1,4 @@
+
+> @resolveai/widget@0.1.0 typecheck /Users/mavery/Documents/New project/resolveai/apps/widget
+> tsc --noEmit -p ./tsconfig.json
+

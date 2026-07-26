@@ -1,0 +1,4 @@
+
+> @resolveai/worker@0.1.0 typecheck /Users/mavery/Documents/New project/resolveai/apps/worker
+> tsc --noEmit -p ./tsconfig.json
+

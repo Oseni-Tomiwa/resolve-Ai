@@ -2,12 +2,12 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import * as jwt from 'jsonwebtoken';
-import { PrismaClient, User } from '@resolveai/database';
+import { PrismaClient } from '@resolveai/database';
 import { LoginDto, RegisterDto } from './dto';
 
-type PublicUser = Pick<User, 'id' | 'firstName' | 'lastName' | 'email' | 'emailVerifiedAt' | 'createdAt' | 'updatedAt'>;
+type PublicUser = { id: string; firstName: string; lastName: string; email: string; emailVerifiedAt: Date | null; createdAt: Date; updatedAt: Date };
 type Tokens = { accessToken: string; refreshToken: string };
-const publicUser = (user: User): PublicUser => { const { passwordHash: _passwordHash, ...safe } = user; return safe; };
+const publicUser = (user: PublicUser & { passwordHash: string }): PublicUser => { const { passwordHash: _passwordHash, ...safe } = user; return safe; };
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
 
 @Injectable()

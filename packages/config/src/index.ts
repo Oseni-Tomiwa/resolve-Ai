@@ -12,4 +12,4 @@ export const envSchema = z.object({
   JWT_REFRESH_TTL: z.string().default('30d'),
 });
 export type Env = z.infer<typeof envSchema>;
-export const loadEnv = (input: NodeJS.ProcessEnv): Env => envSchema.parse(input);
+export const loadEnv = (input: Record<string, string | undefined>): Env => envSchema.parse(input);

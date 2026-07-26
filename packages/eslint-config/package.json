@@ -1,1 +1,9 @@
-{ "name": "@resolveai/eslint-config", "version": "0.1.0", "private": true }
+{
+  "name": "@resolveai/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./index.mjs" },
+  "scripts": { "lint": "eslint .", "typecheck": "echo 'eslint config has no TypeScript source'", "test": "echo 'eslint config tests pending'" },
+  "dependencies": { "@eslint/js": "^9.17.0", "eslint": "^9.17.0", "globals": "^15.14.0", "typescript-eslint": "^8.19.1" }
+}

@@ -1,1 +1,10 @@
-{ "name": "@resolveai/config", "version": "0.1.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "scripts": { "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "echo 'config tests pending'" }, "dependencies": { "zod": "^3.24.1" }, "devDependencies": { "typescript": "^5.7.2" } }
+{
+  "name": "@resolveai/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "lint": "eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'config tests pending'" },
+  "dependencies": { "zod": "^3.24.1" },
+  "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "typescript": "^5.7.2" }
+}

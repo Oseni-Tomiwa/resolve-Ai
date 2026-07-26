@@ -1,1 +1,5 @@
-{ "name": "@resolveai/ai", "version": "0.1.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" }, "scripts": { "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "echo 'ai tests pending'" }, "devDependencies": { "typescript": "^5.7.2" } }
+{
+  "name": "@resolveai/ai", "version": "0.1.0", "private": true, "type": "module", "exports": { ".": "./src/index.ts" },
+  "scripts": { "lint": "eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'ai tests pending'" },
+  "devDependencies": { "@resolveai/eslint-config": "workspace:*", "eslint": "^9.17.0", "typescript": "^5.7.2" }
+}

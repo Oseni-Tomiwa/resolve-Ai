@@ -1,0 +1,6 @@
+{
+  "extends": "../typescript-config/nextjs.json",
+  "compilerOptions": { "rootDir": "./src" },
+  "include": ["./src/**/*.ts", "./src/**/*.tsx"],
+  "exclude": ["./node_modules", "./dist", "./build", "./coverage"]
+}

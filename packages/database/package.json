@@ -1,1 +1,10 @@
-{ "name": "@resolveai/database", "version": "0.1.0", "private": true, "type": "module", "scripts": { "generate": "prisma generate", "migrate": "prisma migrate dev", "lint": "echo 'database lint pending'", "typecheck": "tsc --noEmit", "test": "echo 'database tests pending'" }, "dependencies": { "@prisma/client": "^6.1.0" }, "devDependencies": { "prisma": "^6.1.0", "typescript": "^5.7.2" } }
+{
+  "name": "@resolveai/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "scripts": { "generate": "prisma generate", "migrate": "prisma migrate dev", "lint": "eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'database tests pending'" },
+  "dependencies": { "@prisma/client": "^6.1.0" },
+  "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "prisma": "^6.1.0", "typescript": "^5.7.2" }
+}
