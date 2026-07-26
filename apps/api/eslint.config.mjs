@@ -1,2 +1,7 @@
 import { nestConfig } from '@resolveai/eslint-config';
-export default nestConfig;
+import globals from 'globals';
+
+export default [
+  ...nestConfig,
+  { files: ['**/*.spec.ts'], languageOptions: { globals: { ...globals.jest } } },
+];

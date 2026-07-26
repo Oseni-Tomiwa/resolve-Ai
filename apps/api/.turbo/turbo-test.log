@@ -1,13 +1,37 @@
 
 > @resolveai/api@0.1.0 test /Users/mavery/Documents/New project/resolveai/apps/api
-> jest --runInBand
+> jest --config ./jest.config.cjs --runInBand
 
-[1m[2mDetermining test suites to run...[22m[22m[999D[K[1mNo tests found, exiting with code 1[22m
-Run with `--passWithNoTests` to exit with code 0
-In [1m/Users/mavery/Documents/New project/resolveai/apps/api[22m
-  21 files checked.
-  testMatch: [33m**/__tests__/**/*.[jt]s?(x), **/?(*.)+(spec|test).[tj]s?(x)[39m - 0 matches
-  testPathIgnorePatterns: [33m/node_modules/[39m - 21 matches
-  testRegex:  - 0 matches
-Pattern:  - 0 matches
-[41m[30m ELIFECYCLE [39m[49m [31mTest failed. See above for more details.[39m
+[1m[2mDetermining test suites to run...[22m[22m[999D[K
+[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A[0m[7m[1m[32m PASS [39m[22m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+[K[1A[K[1A
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+[K[1A[K[1A[0m[7m[1m[32m PASS [39m[22m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+
+[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+[K[1A[K[1A[999D[K
+[1mTest Suites: [22m[1m[32m2 passed[39m[22m, 2 total
+[1mTests:       [22m[1m[32m6 passed[39m[22m, 6 total
+[1mSnapshots:   [22m0 total
+[1mTime:[22m        0.34 s
+[2mRan all test suites[22m[2m.[22m

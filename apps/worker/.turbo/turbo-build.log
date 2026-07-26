@@ -1,4 +1,4 @@
 
 > @resolveai/worker@0.1.0 build /Users/mavery/Documents/New project/resolveai/apps/worker
-> tsc
+> tsc -p ./tsconfig.json
 
