@@ -3,7 +3,16 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 const ignores = {
-  ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/coverage/**', '**/.next/**', '**/.turbo/**'],
+  ignores: [
+    '**/node_modules/**',
+    '**/.next/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/coverage/**',
+    '**/.turbo/**',
+    '**/.prisma/**',
+    '**/prisma/generated/**',
+  ],
 };
 
 const quality = {

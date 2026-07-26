@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "types": "./src/index.ts",
-  "scripts": { "generate": "prisma generate", "migrate": "prisma migrate dev", "lint": "eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'database tests pending'" },
+  "scripts": { "generate": "prisma generate", "migrate": "prisma migrate dev", "lint": "pnpm exec eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'database tests pending'" },
   "dependencies": { "@prisma/client": "^6.1.0" },
   "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "prisma": "^6.1.0", "typescript": "^5.7.2" }
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { AuthService } from './auth.service';
+import type { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { LoginDto, RefreshDto, RegisterDto } from './dto';
+import type { LoginDto, RefreshDto, RegisterDto } from './dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

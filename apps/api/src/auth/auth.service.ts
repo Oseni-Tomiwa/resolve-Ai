@@ -2,8 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import * as jwt from 'jsonwebtoken';
-import { PrismaClient } from '@resolveai/database';
-import { LoginDto, RegisterDto } from './dto';
+import type { PrismaClient } from '@resolveai/database';
+import type { LoginDto, RegisterDto } from './dto';
 
 type PublicUser = { id: string; firstName: string; lastName: string; email: string; emailVerifiedAt: Date | null; createdAt: Date; updatedAt: Date };
 type Tokens = { accessToken: string; refreshToken: string };

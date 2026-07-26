@@ -1,4 +1,4 @@
 
 > @resolveai/ui@0.1.0 lint /Users/mavery/Documents/New project/resolveai/packages/ui
-> eslint src
+> pnpm exec eslint src
 

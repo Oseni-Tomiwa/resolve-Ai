@@ -1,6 +1,6 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaClient } from '@resolveai/database';
-import { WorkspaceDto } from './dto';
+import type { PrismaClient } from '@resolveai/database';
+import type { WorkspaceDto } from './dto';
 @Injectable()
 export class WorkspacesService {
   constructor(@Inject('PRISMA') private readonly db: PrismaClient) {}
