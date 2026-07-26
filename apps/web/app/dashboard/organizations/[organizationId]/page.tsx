@@ -1,0 +1,1 @@
+export default async function OrganizationPage({ params }: { params: Promise<{ organizationId: string }> }) { const { organizationId } = await params; return <main style={{ padding: 40 }}><p>Organization</p><h1>{organizationId}</h1><p>Workspace management is ready for API integration.</p></main>; }

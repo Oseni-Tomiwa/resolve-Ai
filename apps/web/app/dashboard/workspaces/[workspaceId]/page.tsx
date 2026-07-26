@@ -1,0 +1,1 @@
+export default async function WorkspacePage({ params }: { params: Promise<{ workspaceId: string }> }) { const { workspaceId } = await params; return <main style={{ padding: 40 }}><p>Workspace</p><h1>{workspaceId}</h1><p>Conversation tools will be added in a later phase.</p></main>; }

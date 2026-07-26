@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function Home() { return <main style={{ maxWidth: 960, margin: '0 auto', padding: '96px 24px' }}><p style={{ color: '#7dd3fc' }}>RESOLVEAI</p><h1 style={{ fontSize: 56, lineHeight: 1.05 }}>Support that resolves itself.</h1><p style={{ color: '#a5b4fc', fontSize: 20, maxWidth: 560 }}>A focused workspace for teams to build better customer conversations with AI.</p><p><Link href="/login">Open dashboard →</Link></p></main>; }

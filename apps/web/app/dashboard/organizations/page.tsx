@@ -1,0 +1,1 @@
+export default function Organizations() { return <main style={{ padding: 40 }}><h1>Organizations</h1><p>No organizations yet. Create your first organization from the API or onboarding flow.</p></main>; }
