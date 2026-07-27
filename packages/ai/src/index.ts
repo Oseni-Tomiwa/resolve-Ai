@@ -12,6 +12,7 @@ export type GroundedAnswerInput = {
   question: string;
   instructions: string;
   context: string;
+  conversationContext?: string;
   maximumOutputTokens: number;
 };
 
@@ -23,10 +24,17 @@ export type GroundedAnswerOutput = {
   usage: { inputTokens: number; outputTokens: number };
 };
 
+export type GenerationEvent =
+  | { type: 'response.started' }
+  | { type: 'response.delta'; delta: string }
+  | { type: 'response.completed'; usage: { inputTokens: number; outputTokens: number } }
+  | { type: 'response.failed'; errorCode: string };
+
 export interface TextGenerationProvider {
   readonly provider: string;
   readonly model: string;
   generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput>;
+  streamGroundedAnswer?(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent>;
 }
 
 export type OpenAIEmbeddingProviderOptions = { apiKey: string; model?: string; dimensions?: number };
@@ -89,10 +97,28 @@ export class OpenAITextGenerationProvider implements TextGenerationProvider {
   }
 
   async generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
-    const response = await this.client.responses.create({ model: this.model, instructions: input.instructions, input: input.context + `\n\nUser question:\n${input.question}`, temperature: 0.2, max_output_tokens: input.maximumOutputTokens });
+    const response = await this.client.responses.create({ model: this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: 0.2, max_output_tokens: input.maximumOutputTokens });
     const answer = response.output_text.trim();
     if (!answer) throw new Error('Text generation provider returned an empty answer');
     return { answer, citedSourceNumbers: citedNumbers(answer), provider: this.provider, model: this.model, usage: { inputTokens: response.usage?.input_tokens ?? 0, outputTokens: response.usage?.output_tokens ?? 0 } };
+  }
+
+  async *streamGroundedAnswer(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent> {
+    const stream = await this.client.responses.create({ model: this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: 0.2, max_output_tokens: input.maximumOutputTokens, stream: true });
+    yield { type: 'response.started' };
+    let usage = { inputTokens: 0, outputTokens: 0 };
+    try {
+      for await (const event of stream) {
+        if (signal?.aborted) throw abortError();
+        if (event.type === 'response.output_text.delta' && typeof event.delta === 'string' && event.delta.length > 0) yield { type: 'response.delta', delta: event.delta };
+        if (event.type === 'response.completed') usage = { inputTokens: event.response.usage?.input_tokens ?? 0, outputTokens: event.response.usage?.output_tokens ?? 0 };
+        if (event.type === 'response.failed') yield { type: 'response.failed', errorCode: 'PROVIDER_FAILED' };
+      }
+      yield { type: 'response.completed', usage };
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      yield { type: 'response.failed', errorCode: 'PROVIDER_FAILED' };
+    }
   }
 }
 
@@ -105,4 +131,22 @@ export class DeterministicTextGenerationProvider implements TextGenerationProvid
     if (!firstSource) return { answer: 'I couldn’t find enough information in this workspace’s knowledge base to answer that.', citedSourceNumbers: [], provider: this.provider, model: this.model, usage: { inputTokens: 0, outputTokens: 0 } };
     return { answer: `The answer is supported by the supplied reference passage. [1]`, citedSourceNumbers: [1], provider: this.provider, model: this.model, usage: { inputTokens: 0, outputTokens: 0 } };
   }
+
+  async *streamGroundedAnswer(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent> {
+    const result = await this.generateGroundedAnswer(input);
+    yield { type: 'response.started' };
+    for (const delta of result.answer.match(/.{1,16}(?:\s|$)/g) ?? [result.answer]) {
+      if (signal?.aborted) throw abortError();
+      yield { type: 'response.delta', delta };
+    }
+    yield { type: 'response.completed', usage: result.usage };
+  }
 }
+
+const formatGenerationInput = (input: GroundedAnswerInput): string => {
+  const history = input.conversationContext?.trim();
+  return `${input.context}${history ? `\n\nRecent conversation context (use only to resolve references; workspace sources remain authoritative):\n${history}` : ''}\n\nUser question:\n${input.question}`;
+};
+
+const abortError = (): Error => { const error = new Error('Generation cancelled'); error.name = 'AbortError'; return error; };
+const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';

@@ -1,9 +1,10 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-// Nest dependency injection needs this constructor at runtime.
+// Nest dependency injection and validation need these constructors at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SemanticSearchService } from './semantic-search.service';
-import type { SemanticSearchDto } from './semantic-search.dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { SemanticSearchDto } from './semantic-search.dto';
 
 type RequestWithUser = { user: { sub: string } };
 

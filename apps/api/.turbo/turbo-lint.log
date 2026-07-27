@@ -2,3 +2,10 @@
 > @resolveai/api@0.1.0 lint /Users/mavery/Documents/New project/resolveai/apps/api
 > pnpm exec eslint src
 
+
+/Users/mavery/Documents/New project/resolveai/apps/api/src/knowledge/grounded-answer.service.ts
+  47:7  warning  Unexpected console statement  no-console
+  53:5  warning  Unexpected console statement  no-console
+
+✖ 2 problems (0 errors, 2 warnings)
+

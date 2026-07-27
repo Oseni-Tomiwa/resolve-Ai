@@ -2,36 +2,35 @@
 > @resolveai/api@0.1.0 test /Users/mavery/Documents/New project/resolveai/apps/api
 > jest --config ./jest.config.cjs --runInBand
 
-[1m[2mDetermining test suites to run...[22m[22m[999D[K
-[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A[0m[7m[1m[32m PASS [39m[22m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
+PASS src/knowledge/knowledge.dto.spec.ts
+PASS src/conversations/conversations.service.spec.ts
+PASS src/knowledge/knowledge.service.spec.ts
+PASS src/knowledge/grounded-answer.service.spec.ts
+  ● Console
 
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/auth/[22m[1mauth.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
-[K[1A[K[1A
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
-[K[1A[K[1A[0m[7m[1m[32m PASS [39m[22m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
+    console.info
+      {"event":"knowledge.answer","requestId":"065d3805-cdc8-479b-bd62-0720afba9350","workspaceId":"workspace-1","userId":"user-1","retrievedSourceCount":1,"model":"deterministic-grounded-v1","latencyMs":1,"inputTokens":0,"outputTokens":0,"success":true,"category":"generated"}
 
-[0m[7m[33m[1m RUNS [22m[39m[27m[0m [2msrc/organizations/[22m[1morganizations.service.spec.ts[22m
-[K[1A[K[1A[999D[K
-[1mTest Suites: [22m[1m[32m2 passed[39m[22m, 2 total
-[1mTests:       [22m[1m[32m6 passed[39m[22m, 6 total
-[1mSnapshots:   [22m0 total
-[1mTime:[22m        0.34 s
-[2mRan all test suites[22m[2m.[22m
+      at GroundedAnswerService.answer (src/knowledge/grounded-answer.service.ts:53:13)
+
+    console.info
+      {"event":"knowledge.answer","requestId":"4c94a9e4-f704-4429-b4b6-bdad2b7a9466","workspaceId":"workspace-1","userId":"user-1","retrievedSourceCount":0,"model":null,"latencyMs":1,"success":true,"category":"insufficient_context"}
+
+      at GroundedAnswerService.answer (src/knowledge/grounded-answer.service.ts:47:15)
+
+    console.info
+      {"event":"knowledge.answer","requestId":"6c583f53-6f3e-4403-8743-6fd542b0d5f4","workspaceId":"workspace-1","userId":"user-1","retrievedSourceCount":1,"model":"test-v1","latencyMs":0,"inputTokens":144,"outputTokens":4,"success":true,"category":"generated"}
+
+      at GroundedAnswerService.answer (src/knowledge/grounded-answer.service.ts:53:13)
+
+PASS src/knowledge/semantic-search.service.spec.ts
+PASS src/workspace-access/workspace-access.service.spec.ts
+PASS src/onboarding/onboarding.service.spec.ts
+PASS src/organizations/organizations.service.spec.ts
+PASS src/auth/auth.service.spec.ts
+
+Test Suites: 9 passed, 9 total
+Tests:       37 passed, 37 total
+Snapshots:   0 total
+Time:        0.812 s, estimated 1 s
+Ran all test suites.
