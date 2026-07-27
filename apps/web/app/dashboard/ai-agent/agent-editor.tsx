@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDashboard } from '../dashboard-context';
+import { apiRequest } from '../../api-client';
 
 type Agent = { id?: string; name: string; description: string | null; instructions: string; greeting: string | null; fallbackMessage: string | null; model: string; temperature: number; maxOutputTokens: number; status: 'DRAFT' | 'ACTIVE' | 'DISABLED'; isDefault: boolean };
 type ModelOption = { id: string; label: string };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 const emptyAgent: Agent = { name: '', description: null, instructions: '', greeting: null, fallbackMessage: null, model: 'gpt-4o-mini', temperature: 0.2, maxOutputTokens: 800, status: 'DRAFT', isDefault: false };
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } }); const body = await response.json() as { success: boolean; message?: string; data?: T }; if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'Unable to save the agent.'); return body.data; }
+async function api<T>(path: string, init?: RequestInit): Promise<T> { return apiRequest<T>(path, init); }
 
 export function AgentEditor({ agentId }: { agentId?: string }) {
   const router = useRouter();

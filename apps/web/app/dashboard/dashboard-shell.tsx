@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../auth-provider';
 import { useDashboard } from './dashboard-context';
 
-type IconName = 'overview' | 'inbox' | 'conversations' | 'knowledge' | 'agent' | 'team' | 'settings' | 'billing' | 'menu' | 'chevron' | 'logout';
+type IconName = 'overview' | 'inbox' | 'conversations' | 'knowledge' | 'agent' | 'team' | 'settings' | 'billing' | 'widget' | 'menu' | 'chevron' | 'logout';
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, string> = {
@@ -18,6 +18,7 @@ function Icon({ name }: { name: IconName }) {
     team: 'M16 20v-1.5a3.5 3.5 0 0 0-7 0V20M12.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 8a2.5 2.5 0 0 1 0 4M20 19v-1a3 3 0 0 0-2-2.8',
     settings: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.3 3h-4.6l-.4 2.6a7 7 0 0 0-2 1.2L5 5.9 3 9.3l2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4.6l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z',
     billing: 'M4 6h16v12H4zM4 10h16M8 15h3',
+    widget: 'M5 5h14v14H5zM9 9h6v6H9z',
     menu: 'M4 7h16M4 12h16M4 17h16',
     chevron: 'M6 9l6 6 6-6',
     logout: 'M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-4',
@@ -28,7 +29,7 @@ function Icon({ name }: { name: IconName }) {
 const primary = [
   ['Overview', '/dashboard', 'overview'], ['Inbox', '/dashboard/inbox', 'inbox'], ['Conversations', '/dashboard/conversations', 'conversations'], ['Knowledge Base', '/dashboard/knowledge', 'knowledge'], ['Ask ResolveAI', '/dashboard/knowledge/ask', 'knowledge'], ['AI Agent', '/dashboard/ai-agent', 'agent'],
 ] as const;
-const workspaceLinks = [['Team', '/dashboard/team', 'team'], ['Settings', '/dashboard/settings', 'settings'], ['Billing', '/dashboard/billing', 'billing']] as const;
+const workspaceLinks = [['Team', '/dashboard/team', 'team'], ['Widget', '/dashboard/widget', 'widget'], ['Settings', '/dashboard/settings', 'settings'], ['Billing', '/dashboard/billing', 'billing']] as const;
 
 function Switcher({ label, value, options, onChange }: { label: string; value: string; options: Array<{ id: string; name: string; slug: string }>; onChange: (id: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);
@@ -53,14 +54,16 @@ function UserMenu() {
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { user, sessionExpired, logout } = useAuth();
+  const { user, loading: authLoading, sessionExpired, clearSession } = useAuth();
   const { organizations, workspaces, currentOrganization, currentWorkspace, organizationRole, workspaceRole, loading, error, selectOrganization, selectWorkspace, reload } = useDashboard();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const pageTitle = pathname === '/dashboard' ? 'Overview' : pathname.split('/').filter(Boolean).pop()?.replaceAll('-', ' ') ?? 'Overview';
-  async function leaveExpiredSession(): Promise<void> { try { await logout(); } finally { router.replace('/login?reason=session-expired'); } }
+  function leaveExpiredSession(): void { clearSession(); router.replace('/login?reason=session-expired'); }
   useEffect(() => { if (sessionExpired) void leaveExpiredSession(); }, [sessionExpired]);
+  if (authLoading) return <div className="auth-layout"><div className="auth-loading">Checking your secure session…</div></div>;
+  if (!user || sessionExpired) return null;
   return <div className="dashboard-app"><div className="dashboard-mobile-bar"><Link href="/dashboard" className="brand" aria-label="ResolveAI overview"><span className="brand-mark">R</span><span>resolve<span className="brand-accent">ai</span></span></Link><button type="button" className="mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button></div><div className={`dashboard-sidebar-layer${mobileOpen ? ' is-open' : ''}`} onClick={() => setMobileOpen(false)}><div onClick={(event) => event.stopPropagation()}><Sidebar collapsed={collapsed} onToggle={() => setCollapsed((current) => !current)} onNavigate={() => setMobileOpen(false)} /></div></div><div className={`dashboard-main${collapsed ? ' sidebar-collapsed' : ''}`}><header className="dashboard-topbar"><div className="topbar-context"><Switcher label="Organization" value={currentOrganization?.name ?? ''} options={organizations} onChange={selectOrganization} /><span className="context-divider">/</span><Switcher label="Workspace" value={currentWorkspace?.name ?? ''} options={workspaces} onChange={selectWorkspace} /></div><UserMenu /></header><main className="dashboard-page"><div className="page-heading"><div><p className="eyebrow"><span className="eyebrow-dot" /> Workspace</p><h1>{pageTitle}</h1></div><div className="page-meta">{organizationRole ?? 'Member'} · {workspaceRole ?? 'Workspace access'}</div></div>{sessionExpired && <div className="dashboard-error" role="alert"><span>Your session expired. Sign in again to continue.</span><button type="button" onClick={() => { void leaveExpiredSession(); }}>Sign in</button></div>}{loading && !sessionExpired && <div className="dashboard-inline-status" role="status">Loading your workspace…</div>}{error && !sessionExpired && <div className="dashboard-error" role="alert"><span>{error}</span><button type="button" onClick={() => void reload()}>Try again</button></div>}{user && !sessionExpired && children}</main></div></div>;
 }

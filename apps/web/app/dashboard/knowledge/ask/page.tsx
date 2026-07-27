@@ -3,21 +3,15 @@
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { useDashboard } from '../../dashboard-context';
+import { apiRequest } from '../../../api-client';
 
 type AnswerSource = { number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number };
 type AnswerResponse = { answer: string; sources: AnswerSource[] };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-
 async function ask(workspaceId: string, question: string): Promise<AnswerResponse> {
-  const response = await fetch(`${apiBaseUrl}/workspaces/${workspaceId}/knowledge/answer`, {
+  return apiRequest<AnswerResponse>(`/workspaces/${workspaceId}/knowledge/answer`, {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, documentIds: [] }),
   });
-  const body = await response.json() as { success: boolean; message?: string; data?: AnswerResponse };
-  if (!response.ok || !body.success || !body.data) throw new Error(body.message ?? 'Unable to generate a grounded answer.');
-  return body.data;
 }
 
 export default function AskKnowledge() {

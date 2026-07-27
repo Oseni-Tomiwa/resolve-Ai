@@ -4,17 +4,13 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDashboard } from '../dashboard-context';
+import { apiRequest } from '../../api-client';
 
 type Conversation = { id: string; workspaceId: string; title: string; lastMessageAt: string; createdAt: string; status: string };
 type Agent = { id: string; name: string; description: string | null; isDefault: boolean; status: string };
 type Page = { items: Conversation[]; page: number; pageSize: number; total: number; hasMore: boolean };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  const body = await response.json() as { success: boolean; message?: string; data?: T };
-  if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'Unable to load conversations.');
-  return body.data;
+  return apiRequest<T>(path, init);
 }
 
 const formatDate = (value: string): string => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));

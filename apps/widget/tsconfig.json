@@ -1,6 +1,6 @@
 {
   "extends": "../../packages/typescript-config/base.json",
-  "compilerOptions": { "outDir": "./dist", "rootDir": "./src" },
+  "compilerOptions": { "outDir": "./dist", "rootDir": "./src", "noEmit": false, "module": "none", "moduleResolution": "classic", "resolveJsonModule": false, "outFile": "../../apps/web/public/widget.js" },
   "include": ["./src/**/*.ts"],
   "exclude": ["./node_modules", "./dist", "./build", "./coverage"]
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { apiFetch, registerSessionFailureHandler } from './api-client';
 
 export type AuthUser = { id: string; firstName: string; lastName: string; email: string; emailVerifiedAt: string | null; createdAt: string; updatedAt: string };
 export type WorkspaceSummary = { id: string; organizationId: string; name: string; slug: string; createdAt?: string; updatedAt?: string; members?: Array<{ role: string }> };
@@ -12,7 +13,6 @@ export type OnboardingInput = { organizationName: string; organizationSlug: stri
 type ApiResponse = { success: boolean; message?: string; data?: { user?: AuthUser; onboarding?: OnboardingState; organization?: OnboardingState['currentOrganization']; workspace?: OnboardingState['currentWorkspace'] } };
 type AuthContextValue = { user: AuthUser | null; onboarding: OnboardingState | null; loading: boolean; authenticated: boolean; sessionExpired: boolean; login: (credentials: Credentials) => Promise<void>; register: (details: Registration) => Promise<void>; createOnboarding: (input: OnboardingInput) => Promise<void>; logout: () => Promise<void>; clearSession: () => void; refreshSession: () => Promise<AuthUser | null> };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 const AuthContext = createContext<AuthContextValue | null>(null);
 export const clearClientSession = (): void => {
   if (typeof window === 'undefined') return;
@@ -25,7 +25,7 @@ export const clearClientSession = (): void => {
 };
 
 async function request(path: string, init?: RequestInit): Promise<ApiResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  const response = await apiFetch(path, init, { retryOnUnauthorized: false });
   let body: ApiResponse;
   try { body = await response.json() as ApiResponse; } catch { throw new Error('The server returned an unreadable response.'); }
   if (!response.ok || !body.success) throw new Error(body.message ?? 'The request could not be completed.');
@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applySession, expireSession]);
 
   useEffect(() => { void refreshSession().finally(() => setLoading(false)); }, [refreshSession]);
+  useEffect(() => registerSessionFailureHandler(() => { expireSession(); }), [expireSession]);
 
   const value = useMemo<AuthContextValue>(() => ({
     user, onboarding, loading, authenticated: user !== null, sessionExpired, refreshSession, clearSession: expireSession,

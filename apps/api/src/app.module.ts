@@ -10,5 +10,6 @@ import { WorkspaceAccessModule } from './workspace-access/workspace-access.modul
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { AgentsModule } from './agents/agents.module';
-@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule] })
+import { WidgetModule } from './widget/widget.module';
+@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule, WidgetModule] })
 export class AppModule {}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react';
 import { useDashboard } from '../dashboard-context';
+import { apiRequest } from '../../api-client';
 
 type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'EMBEDDING' | 'READY' | 'FAILED';
 type Document = { id: string; name: string; originalFileName: string; mimeType: string; sizeBytes: number; status: DocumentStatus; processingError?: string | null; createdAt: string; processedAt?: string | null; uploadedBy: { firstName: string; lastName: string; email: string } };
@@ -11,12 +12,11 @@ type ListResponse = { documents: Document[]; total: number; page: number; pageSi
 type SearchResponse = { query: string; results: SearchResult[] };
 type AnswerSource = { number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean };
 type AnswerResponse = { answer: string; sources: AnswerSource[]; provider: string | null; model: string | null; usage: { inputTokens: number; outputTokens: number } };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 const formatBytes = (bytes: number): string => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const formatDate = (value: string): string => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
 const statusLabel: Record<DocumentStatus, string> = { UPLOADED: 'Queued', PROCESSING: 'Processing', EMBEDDING: 'Embedding', READY: 'Ready', FAILED: 'Failed' };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...init?.headers } }); const body = await response.json() as { success: boolean; message?: string; data?: T }; if (!response.ok || !body.success) throw new Error(body.message ?? 'The request could not be completed.'); return body.data as T; }
+async function request<T>(path: string, init?: RequestInit): Promise<T> { return apiRequest<T>(path, init); }
 
 export default function Knowledge() {
   const { currentWorkspace, organizationRole, workspaceRole } = useDashboard();
