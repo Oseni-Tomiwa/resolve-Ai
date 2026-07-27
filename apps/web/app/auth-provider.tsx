@@ -10,11 +10,19 @@ type Credentials = { email: string; password: string };
 type Registration = Credentials & { firstName: string; lastName: string };
 export type OnboardingInput = { organizationName: string; organizationSlug: string; workspaceName: string; workspaceSlug: string; industry: string; teamSize: string };
 type ApiResponse = { success: boolean; message?: string; data?: { user?: AuthUser; onboarding?: OnboardingState; organization?: OnboardingState['currentOrganization']; workspace?: OnboardingState['currentWorkspace'] } };
-type AuthContextValue = { user: AuthUser | null; onboarding: OnboardingState | null; loading: boolean; authenticated: boolean; sessionExpired: boolean; login: (credentials: Credentials) => Promise<void>; register: (details: Registration) => Promise<void>; createOnboarding: (input: OnboardingInput) => Promise<void>; logout: () => Promise<void>; refreshSession: () => Promise<AuthUser | null> };
+type AuthContextValue = { user: AuthUser | null; onboarding: OnboardingState | null; loading: boolean; authenticated: boolean; sessionExpired: boolean; login: (credentials: Credentials) => Promise<void>; register: (details: Registration) => Promise<void>; createOnboarding: (input: OnboardingInput) => Promise<void>; logout: () => Promise<void>; clearSession: () => void; refreshSession: () => Promise<AuthUser | null> };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 const AuthContext = createContext<AuthContextValue | null>(null);
-const clearClientSessionState = (): void => { if (typeof window !== 'undefined') { window.localStorage.removeItem('resolveai.organizationId'); window.localStorage.removeItem('resolveai.workspaceId'); } };
+export const clearClientSession = (): void => {
+  if (typeof window === 'undefined') return;
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (key?.startsWith('resolveai.')) storage.removeItem(key);
+    }
+  }
+};
 
 async function request(path: string, init?: RequestInit): Promise<ApiResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } });
@@ -39,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const expireSession = useCallback((): null => {
-    clearClientSessionState();
+    clearClientSession();
     setUser(null);
     setOnboarding(null);
     setSessionExpired(true);
@@ -62,12 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => { void refreshSession().finally(() => setLoading(false)); }, [refreshSession]);
 
   const value = useMemo<AuthContextValue>(() => ({
-    user, onboarding, loading, authenticated: user !== null, sessionExpired, refreshSession,
+    user, onboarding, loading, authenticated: user !== null, sessionExpired, refreshSession, clearSession: expireSession,
     login: async (credentials) => { await request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }); await refreshSession(); },
     register: async (details) => { await request('/auth/register', { method: 'POST', body: JSON.stringify(details) }); await refreshSession(); },
     createOnboarding: async (input) => { await request('/onboarding', { method: 'POST', body: JSON.stringify(input) }); await refreshSession(); },
-    logout: async () => { try { await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) }); } finally { clearClientSessionState(); setUser(null); setOnboarding(null); setSessionExpired(false); } },
-  }), [loading, onboarding, refreshSession, sessionExpired, user]);
+    logout: async () => { try { await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) }); } finally { clearClientSession(); setUser(null); setOnboarding(null); setSessionExpired(false); } },
+  }), [expireSession, loading, onboarding, refreshSession, sessionExpired, user]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

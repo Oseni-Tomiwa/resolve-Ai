@@ -3,8 +3,10 @@ import type { PrismaClient } from '@resolveai/database';
 import { ConversationsService } from './conversations.service';
 import type { GroundedAnswerService } from '../knowledge/grounded-answer.service';
 import type { WorkspaceAccessService } from '../workspace-access/workspace-access.service';
+import type { AgentsService } from '../agents/agents.service';
 
-const conversation = { id: 'conversation-1', workspaceId: 'workspace-1', createdByUserId: 'user-1', title: 'New conversation', status: 'ACTIVE', createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), lastMessageAt: new Date('2026-01-01'), generationLockAt: null, deletedAt: null };
+const agent = { id: 'agent-1', workspaceId: 'workspace-1', createdByUserId: 'user-1', name: 'Support Agent', description: 'Grounded support', instructions: 'Use the sources.', greeting: 'Hi', fallbackMessage: 'No answer.', model: 'gpt-4o-mini', temperature: 0.2, maxOutputTokens: 800, status: 'ACTIVE', isDefault: true, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), deletedAt: null };
+const conversation = { id: 'conversation-1', workspaceId: 'workspace-1', createdByUserId: 'user-1', title: 'New conversation', status: 'ACTIVE', agentId: 'agent-1', agent, createdAt: new Date('2026-01-01'), updatedAt: new Date('2026-01-01'), lastMessageAt: new Date('2026-01-01'), generationLockAt: null, deletedAt: null };
 const source = { number: 1, documentId: 'document-1', chunkId: 'chunk-1', documentName: 'Refund policy', chunkIndex: 0, contentPreview: 'Refunds are available within 30 days.', similarityScore: 0.92, cited: true };
 
 function setup() {
@@ -37,7 +39,8 @@ function setup() {
     sourcesFor: jest.fn().mockReturnValue([source]),
     providerMetadata: jest.fn().mockReturnValue({ provider: 'deterministic-test', model: 'deterministic-v1' }),
   };
-  return { db, access, grounded, service: new ConversationsService(db as unknown as PrismaClient, access as unknown as WorkspaceAccessService, grounded as unknown as GroundedAnswerService) };
+  const agents = { ensureDefault: jest.fn().mockResolvedValue(agent), requireActiveForConversation: jest.fn().mockResolvedValue(agent), requireActiveForGeneration: jest.fn().mockResolvedValue(agent) };
+  return { db, access, grounded, agents, service: new ConversationsService(db as unknown as PrismaClient, access as unknown as WorkspaceAccessService, grounded as unknown as GroundedAnswerService, agents as unknown as AgentsService) };
 }
 
 describe('ConversationsService', () => {

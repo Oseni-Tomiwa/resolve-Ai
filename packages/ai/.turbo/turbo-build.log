@@ -1,4 +1,2 @@
-
-> @resolveai/ai@0.1.0 build /Users/mavery/Documents/New project/resolveai/packages/ai
-> tsc -p ./tsconfig.build.json
-
+[ERROR] Refusing to run pnpm@9.15.0: its npm registry signature could not be verified (@pnpm/exe@9.15.0: fetch failed; @pnpm/macos-arm64@9.15.0: fetch failed; pnpm@9.15.0: fetch failed). The bytes selected by this project's lockfile/registry do not match a published, signed pnpm release.
+This can indicate a tampered lockfile or a malicious/unreachable registry. Set `pmOnFail` to `ignore` to skip the version switch if this is unexpected.

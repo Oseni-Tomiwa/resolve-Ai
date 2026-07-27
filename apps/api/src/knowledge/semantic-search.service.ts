@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '@resolveai/database';
 import { OpenAIEmbeddingProvider, type EmbeddingProvider } from '@resolveai/ai';
+import { type EmbeddingEnv } from '@resolveai/config';
 import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -7,6 +8,7 @@ import { WorkspaceAccessService } from '../workspace-access/workspace-access.ser
 import type { SemanticSearchDto } from './semantic-search.dto';
 
 export const SEMANTIC_EMBEDDING_PROVIDER = 'SEMANTIC_EMBEDDING_PROVIDER';
+export const EMBEDDING_CONFIG = 'EMBEDDING_CONFIG';
 const dimensions = 1536;
 const clampScore = (value: number): number => Math.max(0, Math.min(1, value));
 const vectorLiteral = (vector: readonly number[]): string => `[${vector.map((value) => value.toString()).join(',')}]`;
@@ -29,12 +31,12 @@ type SearchRow = {
 export class EnvironmentEmbeddingProvider implements EmbeddingProvider {
   readonly provider = 'openai';
   readonly dimensions = dimensions;
-  get model(): string { return process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small'; }
+  constructor(@Inject(EMBEDDING_CONFIG) private readonly config: EmbeddingEnv) {}
+  get model(): string { return this.config.OPENAI_EMBEDDING_MODEL; }
 
   async embed(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new ServiceUnavailableException('Semantic search embeddings are not configured');
-    return new OpenAIEmbeddingProvider({ apiKey, model: this.model, dimensions }).embed(texts);
+    if (!this.config.OPENAI_API_KEY) throw new ServiceUnavailableException('Semantic search embeddings are not configured');
+    return new OpenAIEmbeddingProvider({ apiKey: this.config.OPENAI_API_KEY, model: this.model, dimensions }).embed(texts);
   }
 }
 

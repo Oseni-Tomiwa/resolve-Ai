@@ -9,5 +9,6 @@ import { OnboardingModule } from './onboarding/onboarding.module';
 import { WorkspaceAccessModule } from './workspace-access/workspace-access.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { ConversationsModule } from './conversations/conversations.module';
-@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, ConversationsModule] })
+import { AgentsModule } from './agents/agents.module';
+@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule] })
 export class AppModule {}

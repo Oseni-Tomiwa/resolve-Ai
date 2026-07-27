@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { OpenAIEmbeddingProvider, type EmbeddingProvider } from '@resolveai/ai';
-import { loadEmbeddingEnv } from '@resolveai/config';
+import { loadEmbeddingEnv, type EmbeddingEnv } from '@resolveai/config';
 import type { PrismaClient } from '@resolveai/database';
 
 type EmbeddingMetadata = { chunkId: string; provider: string; model: string; dimensions: number; contentHash: string };
@@ -8,8 +8,8 @@ type EmbeddableChunk = { id: string; content: string };
 
 export const contentHash = (content: string): string => createHash('sha256').update(content, 'utf8').digest('hex');
 
-export function createProductionEmbeddingProvider(): EmbeddingProvider {
-  const env = loadEmbeddingEnv(process.env);
+export function createProductionEmbeddingProvider(config: EmbeddingEnv = loadEmbeddingEnv(process.env)): EmbeddingProvider {
+  const env = config;
   if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured; document embeddings cannot be generated');
   return new OpenAIEmbeddingProvider({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_EMBEDDING_MODEL, dimensions: 1536 });
 }

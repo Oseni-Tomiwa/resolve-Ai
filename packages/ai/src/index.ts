@@ -14,6 +14,8 @@ export type GroundedAnswerInput = {
   context: string;
   conversationContext?: string;
   maximumOutputTokens: number;
+  model?: string;
+  temperature?: number;
 };
 
 export type GroundedAnswerOutput = {
@@ -65,7 +67,7 @@ export class DeterministicEmbeddingProvider implements EmbeddingProvider {
   readonly model = 'deterministic-v1';
   readonly dimensions: number;
 
-  constructor(dimensions = 8) { if (!Number.isInteger(dimensions) || dimensions <= 0) throw new Error('Embedding dimensions must be a positive integer'); this.dimensions = dimensions; }
+  constructor(dimensions = 8) { assertTestOnlyProvider(); if (!Number.isInteger(dimensions) || dimensions <= 0) throw new Error('Embedding dimensions must be a positive integer'); this.dimensions = dimensions; }
 
   async embed(texts: readonly string[]): Promise<readonly (readonly number[])[]> {
     return texts.map((text) => {
@@ -97,14 +99,15 @@ export class OpenAITextGenerationProvider implements TextGenerationProvider {
   }
 
   async generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
-    const response = await this.client.responses.create({ model: this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: 0.2, max_output_tokens: input.maximumOutputTokens });
+    const model = input.model ?? this.model;
+    const response = await this.client.responses.create({ model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, max_output_tokens: input.maximumOutputTokens });
     const answer = response.output_text.trim();
     if (!answer) throw new Error('Text generation provider returned an empty answer');
-    return { answer, citedSourceNumbers: citedNumbers(answer), provider: this.provider, model: this.model, usage: { inputTokens: response.usage?.input_tokens ?? 0, outputTokens: response.usage?.output_tokens ?? 0 } };
+    return { answer, citedSourceNumbers: citedNumbers(answer), provider: this.provider, model, usage: { inputTokens: response.usage?.input_tokens ?? 0, outputTokens: response.usage?.output_tokens ?? 0 } };
   }
 
   async *streamGroundedAnswer(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent> {
-    const stream = await this.client.responses.create({ model: this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: 0.2, max_output_tokens: input.maximumOutputTokens, stream: true });
+    const stream = await this.client.responses.create({ model: input.model ?? this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, max_output_tokens: input.maximumOutputTokens, stream: true });
     yield { type: 'response.started' };
     let usage = { inputTokens: 0, outputTokens: 0 };
     try {
@@ -125,6 +128,8 @@ export class OpenAITextGenerationProvider implements TextGenerationProvider {
 export class DeterministicTextGenerationProvider implements TextGenerationProvider {
   readonly provider = 'deterministic-test';
   readonly model = 'deterministic-grounded-v1';
+
+  constructor() { assertTestOnlyProvider(); }
 
   async generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
     const firstSource = input.context.match(/\[Source 1\][\s\S]*?Content:\n([\s\S]*?)(?:\n\n\[Source|$)/)?.[1]?.trim();
@@ -147,6 +152,8 @@ const formatGenerationInput = (input: GroundedAnswerInput): string => {
   const history = input.conversationContext?.trim();
   return `${input.context}${history ? `\n\nRecent conversation context (use only to resolve references; workspace sources remain authoritative):\n${history}` : ''}\n\nUser question:\n${input.question}`;
 };
+
+const assertTestOnlyProvider = (): void => { if (process.env.NODE_ENV !== 'test') throw new Error('Deterministic providers are test-only'); };
 
 const abortError = (): Error => { const error = new Error('Generation cancelled'); error.name = 'AbortError'; return error; };
 const isAbortError = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';

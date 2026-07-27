@@ -2,7 +2,13 @@ node_modules
 .env
 .env.*
 !.env.example
+.env.example
 dist
 .next
 coverage
 /storage
+.turbo/
+**/.turbo/
+**/.next/
+node_modules/
+.env
