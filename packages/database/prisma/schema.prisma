@@ -43,6 +43,11 @@ enum AIAgentStatus {
   DISABLED
 }
 
+enum WidgetPosition {
+  BOTTOM_LEFT
+  BOTTOM_RIGHT
+}
+
 enum OrganizationIndustry {
   SAAS
   ECOMMERCE
@@ -120,6 +125,11 @@ model Workspace {
   aiConversations AIConversation[]
   aiAgents AIAgent[]
   aiMessages AIMessage[]
+  widgetConfiguration WidgetConfiguration?
+  widgetSessions WidgetSession[]
+  widgetConversations WidgetConversation[]
+  widgetMessages WidgetMessage[]
+  widgetMessageSources WidgetMessageSource[]
   aiMessageSources AIMessageSource[]
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -187,6 +197,7 @@ model KnowledgeDocument {
   chunks KnowledgeChunk[]
   embeddings KnowledgeEmbedding[]
   aiMessageSources AIMessageSource[]
+  widgetMessageSources WidgetMessageSource[]
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
   @@index([status])
@@ -208,6 +219,7 @@ model KnowledgeChunk {
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   embeddings KnowledgeEmbedding[]
   aiMessageSources AIMessageSource[]
+  widgetMessageSources WidgetMessageSource[]
   @@unique([documentId, chunkIndex])
   @@index([workspaceId])
   @@index([documentId])
@@ -280,11 +292,114 @@ model AIAgent {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User @relation("AgentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   conversations AIConversation[]
+  widgetConfigurations WidgetConfiguration[]
+  widgetConversations WidgetConversation[]
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
   @@index([workspaceId, status])
   @@index([workspaceId, isDefault])
   @@index([workspaceId, deletedAt])
+}
+
+model WidgetConfiguration {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @unique @db.Uuid
+  publicId String @unique @default(cuid())
+  enabled Boolean @default(false)
+  name String @default("ResolveAI Support")
+  selectedAgentId String @db.Uuid
+  greeting String @default("Hi! How can I help you today?")
+  accentColor String @default("#7ce7dc")
+  position WidgetPosition @default(BOTTOM_RIGHT)
+  launcherLabel String @default("Chat with us")
+  allowedDomains String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  selectedAgent AIAgent @relation(fields: [selectedAgentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  sessions WidgetSession[]
+  conversations WidgetConversation[]
+  @@index([workspaceId, enabled])
+}
+
+model WidgetSession {
+  id String @id @default(uuid()) @db.Uuid
+  widgetConfigurationId String @db.Uuid
+  workspaceId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  lastSeenAt DateTime @default(now())
+  messageCount Int @default(0)
+  pageUrl String?
+  referrer String?
+  createdAt DateTime @default(now())
+  widgetConfiguration WidgetConfiguration @relation(fields: [widgetConfigurationId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversations WidgetConversation[]
+  @@index([widgetConfigurationId, expiresAt])
+  @@index([workspaceId, expiresAt])
+}
+
+model WidgetConversation {
+  id String @id @default(uuid()) @db.Uuid
+  widgetConfigurationId String @db.Uuid
+  workspaceId String @db.Uuid
+  sessionId String @db.Uuid
+  agentId String @db.Uuid
+  agentNameSnapshot String
+  title String @default("New visitor conversation")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  widgetConfiguration WidgetConfiguration @relation(fields: [widgetConfigurationId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session WidgetSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  agent AIAgent @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  messages WidgetMessage[]
+  @@unique([id, workspaceId])
+  @@index([workspaceId, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+model WidgetMessage {
+  id String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  workspaceId String @db.Uuid
+  role AIMessageRole
+  content String
+  status AIMessageStatus
+  provider String?
+  model String?
+  inputTokens Int?
+  outputTokens Int?
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  conversation WidgetConversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources WidgetMessageSource[]
+  @@unique([id, workspaceId])
+  @@index([conversationId, createdAt])
+}
+
+model WidgetMessageSource {
+  id String @id @default(uuid()) @db.Uuid
+  messageId String @db.Uuid
+  workspaceId String @db.Uuid
+  documentId String @db.Uuid
+  chunkId String @db.Uuid
+  sourceNumber Int
+  documentNameSnapshot String
+  chunkIndexSnapshot Int
+  contentPreview String
+  similarityScore Float
+  cited Boolean @default(false)
+  createdAt DateTime @default(now())
+  message WidgetMessage @relation(fields: [messageId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document KnowledgeDocument @relation(fields: [documentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  chunk KnowledgeChunk @relation(fields: [chunkId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  @@unique([messageId, sourceNumber])
+  @@index([workspaceId, createdAt])
 }
 
 model AIMessage {

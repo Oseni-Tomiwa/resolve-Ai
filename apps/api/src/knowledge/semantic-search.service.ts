@@ -46,6 +46,14 @@ export class SemanticSearchService {
 
   async search(userId: string, workspaceId: string, input: SemanticSearchDto) {
     await this.workspaceAccess.assertMember(userId, workspaceId);
+    return this.searchInternal(workspaceId, input);
+  }
+
+  async searchPublic(workspaceId: string, input: SemanticSearchDto) {
+    return this.searchInternal(workspaceId, input);
+  }
+
+  private async searchInternal(workspaceId: string, input: SemanticSearchDto) {
     const query = input.query.trim();
     if (!query) throw new BadRequestException('Search query cannot be empty');
     if (query.length > 1000) throw new BadRequestException('Search query must be 1000 characters or fewer');

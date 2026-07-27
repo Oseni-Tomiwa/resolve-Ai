@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../auth-provider';
 import { useDashboard } from './dashboard-context';
 
-type IconName = 'overview' | 'inbox' | 'conversations' | 'knowledge' | 'agent' | 'team' | 'settings' | 'billing' | 'menu' | 'chevron' | 'logout';
+type IconName = 'overview' | 'inbox' | 'conversations' | 'knowledge' | 'agent' | 'team' | 'settings' | 'billing' | 'widget' | 'menu' | 'chevron' | 'logout';
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, string> = {
@@ -18,6 +18,7 @@ function Icon({ name }: { name: IconName }) {
     team: 'M16 20v-1.5a3.5 3.5 0 0 0-7 0V20M12.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 8a2.5 2.5 0 0 1 0 4M20 19v-1a3 3 0 0 0-2-2.8',
     settings: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.3 3h-4.6l-.4 2.6a7 7 0 0 0-2 1.2L5 5.9 3 9.3l2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4.6l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z',
     billing: 'M4 6h16v12H4zM4 10h16M8 15h3',
+    widget: 'M5 5h14v14H5zM9 9h6v6H9z',
     menu: 'M4 7h16M4 12h16M4 17h16',
     chevron: 'M6 9l6 6 6-6',
     logout: 'M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-4',
@@ -28,7 +29,7 @@ function Icon({ name }: { name: IconName }) {
 const primary = [
   ['Overview', '/dashboard', 'overview'], ['Inbox', '/dashboard/inbox', 'inbox'], ['Conversations', '/dashboard/conversations', 'conversations'], ['Knowledge Base', '/dashboard/knowledge', 'knowledge'], ['Ask ResolveAI', '/dashboard/knowledge/ask', 'knowledge'], ['AI Agent', '/dashboard/ai-agent', 'agent'],
 ] as const;
-const workspaceLinks = [['Team', '/dashboard/team', 'team'], ['Settings', '/dashboard/settings', 'settings'], ['Billing', '/dashboard/billing', 'billing']] as const;
+const workspaceLinks = [['Team', '/dashboard/team', 'team'], ['Widget', '/dashboard/widget', 'widget'], ['Settings', '/dashboard/settings', 'settings'], ['Billing', '/dashboard/billing', 'billing']] as const;
 
 function Switcher({ label, value, options, onChange }: { label: string; value: string; options: Array<{ id: string; name: string; slug: string }>; onChange: (id: string) => Promise<void> }) {
   const [open, setOpen] = useState(false);

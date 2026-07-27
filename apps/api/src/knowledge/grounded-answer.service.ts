@@ -54,6 +54,14 @@ export class GroundedAnswerService {
   }
 
   async prepare(userId: string, workspaceId: string, rawQuestion: string, documentIds?: string[], agent?: AgentGenerationOptions): Promise<PreparedGroundedAnswer> {
+    return this.prepareInternal(userId, workspaceId, rawQuestion, documentIds, agent, false);
+  }
+
+  async preparePublic(workspaceId: string, rawQuestion: string, agent?: AgentGenerationOptions): Promise<PreparedGroundedAnswer> {
+    return this.prepareInternal(undefined, workspaceId, rawQuestion, undefined, agent, true);
+  }
+
+  private async prepareInternal(userId: string | undefined, workspaceId: string, rawQuestion: string, documentIds: string[] | undefined, agent: AgentGenerationOptions | undefined, publicAccess: boolean): Promise<PreparedGroundedAnswer> {
     const question = rawQuestion.trim();
     if (!question) throw new BadRequestException('Question cannot be empty');
     if (question.length > 1000) throw new BadRequestException('Question must be 1000 characters or fewer');
@@ -62,7 +70,7 @@ export class GroundedAnswerService {
     if (now - (this.lastRequestAt.get(requestKey) ?? 0) < 2000) throw new HttpException('Please wait before asking another question', HttpStatus.TOO_MANY_REQUESTS);
     this.lastRequestAt.set(requestKey, now);
     const env = this.config;
-    const retrieval = await this.semanticSearch.search(userId, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds });
+    const retrieval = publicAccess ? await this.semanticSearch.searchPublic(workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE }) : await this.semanticSearch.search(userId as string, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds });
     const selected = [] as typeof retrieval.results;
     let contextLength = 0;
     for (const result of retrieval.results) { const normalized = normalizeForDeduplication(result.content); if (selected.some((candidate) => normalized === normalizeForDeduplication(candidate.content) || heavilyOverlaps(normalized, normalizeForDeduplication(candidate.content)))) continue; if (contextLength + result.content.length > contextCharacterLimit) break; selected.push(result); contextLength += result.content.length; }
