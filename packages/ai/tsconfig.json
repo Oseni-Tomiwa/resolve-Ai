@@ -1,6 +1,6 @@
 {
-  "extends": "../typescript-config/base.json",
-  "compilerOptions": { "rootDir": "./src" },
+  "extends": "../typescript-config/node.json",
+  "compilerOptions": { "module": "CommonJS", "moduleResolution": "Node", "esModuleInterop": true, "allowSyntheticDefaultImports": true, "rootDir": "./src" },
   "include": ["./src/**/*.ts"],
   "exclude": ["./node_modules", "./dist", "./build", "./coverage"]
 }

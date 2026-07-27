@@ -1,12 +1,11 @@
 {
-  "name": "@resolveai/config",
+  "name": "@resolveai/storage",
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": { ".": { "types": "./src/index.ts", "require": "./dist/index.js", "default": "./dist/index.js" } },
-  "scripts": { "lint": "pnpm exec eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "build": "tsc -p ./tsconfig.build.json", "test": "echo 'config tests pending'" },
-  "dependencies": { "zod": "^3.24.1" },
+  "scripts": { "build": "tsc -p ./tsconfig.build.json", "typecheck": "tsc --noEmit -p ./tsconfig.json", "lint": "pnpm exec eslint src", "test": "echo 'storage tests pending'" },
   "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "typescript": "^5.7.2" }
 }

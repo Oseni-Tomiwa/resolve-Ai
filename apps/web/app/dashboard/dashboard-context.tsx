@@ -37,6 +37,22 @@ function updateSelection(router: ReturnType<typeof useRouter>, pathname: string,
   router.replace(`${pathname}?${params.toString()}`, { scroll: false });
 }
 
+function clearWorkspaceState(
+  setOrganizations: (value: OrganizationSummary[]) => void,
+  setWorkspaces: (value: WorkspaceSummary[]) => void,
+  setCurrentOrganization: (value: OrganizationSummary | null) => void,
+  setCurrentWorkspace: (value: WorkspaceSummary | null) => void,
+  setOrganizationRole: (value: string | null) => void,
+  setWorkspaceRole: (value: string | null) => void,
+): void {
+  setOrganizations([]);
+  setWorkspaces([]);
+  setCurrentOrganization(null);
+  setCurrentWorkspace(null);
+  setOrganizationRole(null);
+  setWorkspaceRole(null);
+}
+
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const { user, onboarding, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -51,13 +67,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const loadOrganizations = useCallback(async () => {
-    if (!user || onboarding?.required) return;
     setLoading(true);
     setError(null);
+    if (!user) {
+      clearWorkspaceState(setOrganizations, setWorkspaces, setCurrentOrganization, setCurrentWorkspace, setOrganizationRole, setWorkspaceRole);
+      setLoading(false);
+      return;
+    }
+    if (onboarding?.required) {
+      clearWorkspaceState(setOrganizations, setWorkspaces, setCurrentOrganization, setCurrentWorkspace, setOrganizationRole, setWorkspaceRole);
+      setLoading(false);
+      if (pathname.startsWith('/dashboard')) router.replace('/onboarding');
+      return;
+    }
     try {
       const listed = await request<OrganizationWithMembership[]>('/organizations');
+      if (listed.length === 0) {
+        clearWorkspaceState(setOrganizations, setWorkspaces, setCurrentOrganization, setCurrentWorkspace, setOrganizationRole, setWorkspaceRole);
+        setError('You do not belong to an organization yet. Complete onboarding to continue.');
+        setLoading(false);
+        if (pathname.startsWith('/dashboard')) router.replace('/onboarding');
+        return;
+      }
       const url = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search);
-      const requestedId = url.get('organization');
+      const requestedId = url.get('organization') ?? (typeof window === 'undefined' ? null : window.localStorage.getItem('resolveai.organizationId'));
       const selected = listed.find((item) => item.id === requestedId) ?? listed[0] ?? null;
       setOrganizations(listed);
       setCurrentOrganization(selected);
@@ -68,13 +101,28 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         return;
       }
       const selectedWorkspaces = await request<WorkspaceSummary[]>(`/organizations/${selected.id}/workspaces`);
-      const requestedWorkspaceId = url.get('workspace');
+      if (selectedWorkspaces.length === 0) {
+        setWorkspaces([]);
+        setCurrentWorkspace(null);
+        setWorkspaceRole(null);
+        setError('This organization has no accessible workspace yet. Complete onboarding or contact an administrator.');
+        if (typeof window !== 'undefined') window.localStorage.removeItem('resolveai.workspaceId');
+        updateSelection(router, pathname, selected.id, null);
+        return;
+      }
+      const requestedWorkspaceId = url.get('workspace') ?? (typeof window === 'undefined' ? null : window.localStorage.getItem('resolveai.workspaceId'));
       const selectedWorkspace = selectedWorkspaces.find((item) => item.id === requestedWorkspaceId) ?? selectedWorkspaces[0] ?? null;
       setWorkspaces(selectedWorkspaces);
       setCurrentWorkspace(selectedWorkspace);
       setWorkspaceRole(selectedWorkspace?.members?.[0]?.role ?? null);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('resolveai.organizationId', selected.id);
+        if (selectedWorkspace) window.localStorage.setItem('resolveai.workspaceId', selectedWorkspace.id);
+        else window.localStorage.removeItem('resolveai.workspaceId');
+      }
       updateSelection(router, pathname, selected.id, selectedWorkspace?.id ?? null);
     } catch (cause) {
+      clearWorkspaceState(setOrganizations, setWorkspaces, setCurrentOrganization, setCurrentWorkspace, setOrganizationRole, setWorkspaceRole);
       setError(cause instanceof Error ? cause.message : 'Unable to load workspace data.');
     } finally {
       setLoading(false);
@@ -94,8 +142,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       setCurrentOrganization(organization);
       setCurrentWorkspace(nextWorkspace);
       setWorkspaces(nextWorkspaces);
-      setOrganizationRole(null);
+      setOrganizationRole(organization?.members?.[0]?.role ?? null);
       setWorkspaceRole(nextWorkspace?.members?.[0]?.role ?? null);
+      if (!nextWorkspace) {
+        setError('This organization has no accessible workspace yet. Complete onboarding or contact an administrator.');
+      }
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('resolveai.organizationId', organizationId);
+        if (nextWorkspace) window.localStorage.setItem('resolveai.workspaceId', nextWorkspace.id);
+        else window.localStorage.removeItem('resolveai.workspaceId');
+      }
       updateSelection(router, pathname, organizationId, nextWorkspace?.id ?? null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to switch organization.');
@@ -104,7 +160,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const selectWorkspace = useCallback(async (workspaceId: string) => {
     if (!currentOrganization || !workspaces.some((item) => item.id === workspaceId)) throw new Error('Workspace access was denied.');
-    setCurrentWorkspace(workspaces.find((item) => item.id === workspaceId) ?? null);
+    const workspace = workspaces.find((item) => item.id === workspaceId) ?? null;
+    setCurrentWorkspace(workspace);
+    setWorkspaceRole(workspace?.members?.[0]?.role ?? null);
+    if (typeof window !== 'undefined') window.localStorage.setItem('resolveai.workspaceId', workspaceId);
     updateSelection(router, pathname, currentOrganization.id, workspaceId);
   }, [currentOrganization, pathname, router, workspaces]);
 

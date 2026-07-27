@@ -26,7 +26,7 @@ function Icon({ name }: { name: IconName }) {
 }
 
 const primary = [
-  ['Overview', '/dashboard', 'overview'], ['Inbox', '/dashboard/inbox', 'inbox'], ['Conversations', '/dashboard/conversations', 'conversations'], ['Knowledge Base', '/dashboard/knowledge', 'knowledge'], ['AI Agent', '/dashboard/ai-agent', 'agent'],
+  ['Overview', '/dashboard', 'overview'], ['Inbox', '/dashboard/inbox', 'inbox'], ['Conversations', '/dashboard/conversations', 'conversations'], ['Knowledge Base', '/dashboard/knowledge', 'knowledge'], ['Ask ResolveAI', '/dashboard/knowledge/ask', 'knowledge'], ['AI Agent', '/dashboard/ai-agent', 'agent'],
 ] as const;
 const workspaceLinks = [['Team', '/dashboard/team', 'team'], ['Settings', '/dashboard/settings', 'settings'], ['Billing', '/dashboard/billing', 'billing']] as const;
 

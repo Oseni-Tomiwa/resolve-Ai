@@ -7,5 +7,6 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { WorkspaceAccessModule } from './workspace-access/workspace-access.module';
-@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule] })
+import { KnowledgeModule } from './knowledge/knowledge.module';
+@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule] })
 export class AppModule {}

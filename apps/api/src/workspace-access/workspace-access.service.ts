@@ -30,6 +30,7 @@ export class WorkspaceAccessService {
     if (!organizationMember || (!workspaceMember && !['OWNER', 'ADMIN'].includes(organizationMember.role))) throw new ForbiddenException('Workspace membership required');
     return { organizationId: workspace.organizationId, organizationRole: organizationMember.role, workspaceRole: workspaceMember?.role ?? '' };
   }
+  async assertMember(userId: string, workspaceId: string): Promise<void> { await this.access(userId, workspaceId); }
 
   private async requireManager(userId: string, workspaceId: string): Promise<Access> {
     const access = await this.access(userId, workspaceId);

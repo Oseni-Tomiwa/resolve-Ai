@@ -1,0 +1,11 @@
+import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { Queue } from 'bullmq';
+
+export const KNOWLEDGE_QUEUE = 'knowledge-processing';
+
+@Injectable()
+export class KnowledgeQueueService implements OnModuleDestroy {
+  private readonly queue = new Queue(KNOWLEDGE_QUEUE, { connection: { url: process.env.REDIS_URL ?? 'redis://localhost:6379' } });
+  async add(documentId: string, workspaceId: string): Promise<void> { const existing = await this.queue.getJob(documentId); if (existing) { const state = await existing.getState(); if (['active', 'waiting', 'delayed', 'prioritized'].includes(state)) return; await existing.remove(); } await this.queue.add('process-document', { documentId, workspaceId }, { jobId: documentId, attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: 100, removeOnFail: 100 }); }
+  async onModuleDestroy(): Promise<void> { await this.queue.close(); }
+}

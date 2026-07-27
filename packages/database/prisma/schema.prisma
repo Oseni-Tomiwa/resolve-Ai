@@ -50,6 +50,7 @@ model User {
   workspaceMemberships WorkspaceMember[]
   refreshTokens RefreshToken[]
   sentWorkspaceInvitations WorkspaceInvitation[] @relation("InvitationInviter")
+  uploadedKnowledgeDocuments KnowledgeDocument[] @relation("DocumentUploader")
 }
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -86,6 +87,9 @@ model Workspace {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members WorkspaceMember[]
   invitations WorkspaceInvitation[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeChunks KnowledgeChunk[]
+  knowledgeEmbeddings KnowledgeEmbedding[]
   @@unique([organizationId, slug])
   @@index([organizationId])
 }
@@ -121,6 +125,81 @@ model WorkspaceInvitation {
   @@index([workspaceId, email])
   @@index([organizationId])
   @@index([expiresAt])
+}
+
+enum KnowledgeDocumentStatus {
+  UPLOADED
+  PROCESSING
+  EMBEDDING
+  READY
+  FAILED
+}
+
+model KnowledgeDocument {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  uploadedByUserId String @db.Uuid
+  name String
+  originalFileName String
+  mimeType String
+  sizeBytes Int
+  storageKey String @unique
+  status KnowledgeDocumentStatus @default(UPLOADED)
+  extractedText String?
+  processingError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  processedAt DateTime?
+  deletedAt DateTime?
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation("DocumentUploader", fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  chunks KnowledgeChunk[]
+  embeddings KnowledgeEmbedding[]
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([status])
+}
+
+model KnowledgeChunk {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  documentId String @db.Uuid
+  content String
+  chunkIndex Int
+  characterStart Int?
+  characterEnd Int?
+  tokenCountEstimate Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embeddings KnowledgeEmbedding[]
+  @@unique([documentId, chunkIndex])
+  @@index([workspaceId])
+  @@index([documentId])
+  @@index([documentId, chunkIndex])
+}
+
+model KnowledgeEmbedding {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  documentId String @db.Uuid
+  chunkId String @db.Uuid
+  provider String
+  model String
+  dimensions Int
+  embedding Unsupported("vector(1536)")
+  contentHash String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunk KnowledgeChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  @@unique([chunkId, provider, model, dimensions])
+  @@index([workspaceId])
+  @@index([documentId])
+  @@index([chunkId])
+  @@index([workspaceId, provider, model, dimensions])
 }
 model RefreshToken {
   id String @id @default(uuid()) @db.Uuid
