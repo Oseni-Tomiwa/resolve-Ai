@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '../dashboard-context';
+import { apiRequest } from '../../api-client';
 
 type Agent = { id: string; name: string; description: string | null; status: string; isDefault: boolean };
 type WidgetConfig = { id: string; workspaceId: string; publicId: string; enabled: boolean; name: string; selectedAgentId: string; greeting: string; accentColor: string; position: 'BOTTOM_LEFT' | 'BOTTOM_RIGHT'; launcherLabel: string; allowedDomains: string[]; agent: { name: string; description: string | null; greeting: string | null } };
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-async function api<T>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } }); const body = await response.json() as { success: boolean; message?: string; data?: T }; if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'Unable to load widget settings.'); return body.data; }
+async function api<T>(path: string, init?: RequestInit): Promise<T> { return apiRequest<T>(path, init); }
 type WidgetForm = { enabled: boolean; name: string; selectedAgentId: string; greeting: string; accentColor: string; position: 'BOTTOM_LEFT' | 'BOTTOM_RIGHT'; launcherLabel: string; allowedDomains: string[] };
 const empty: WidgetForm = { enabled: false, name: 'ResolveAI Support', selectedAgentId: '', greeting: 'Hi! How can I help you today?', accentColor: '#7ce7dc', position: 'BOTTOM_RIGHT', launcherLabel: 'Chat with us', allowedDomains: [] };
 

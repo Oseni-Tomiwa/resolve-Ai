@@ -54,14 +54,16 @@ function UserMenu() {
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { user, sessionExpired, logout } = useAuth();
+  const { user, loading: authLoading, sessionExpired, clearSession } = useAuth();
   const { organizations, workspaces, currentOrganization, currentWorkspace, organizationRole, workspaceRole, loading, error, selectOrganization, selectWorkspace, reload } = useDashboard();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const pageTitle = pathname === '/dashboard' ? 'Overview' : pathname.split('/').filter(Boolean).pop()?.replaceAll('-', ' ') ?? 'Overview';
-  async function leaveExpiredSession(): Promise<void> { try { await logout(); } finally { router.replace('/login?reason=session-expired'); } }
+  function leaveExpiredSession(): void { clearSession(); router.replace('/login?reason=session-expired'); }
   useEffect(() => { if (sessionExpired) void leaveExpiredSession(); }, [sessionExpired]);
+  if (authLoading) return <div className="auth-layout"><div className="auth-loading">Checking your secure session…</div></div>;
+  if (!user || sessionExpired) return null;
   return <div className="dashboard-app"><div className="dashboard-mobile-bar"><Link href="/dashboard" className="brand" aria-label="ResolveAI overview"><span className="brand-mark">R</span><span>resolve<span className="brand-accent">ai</span></span></Link><button type="button" className="mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button></div><div className={`dashboard-sidebar-layer${mobileOpen ? ' is-open' : ''}`} onClick={() => setMobileOpen(false)}><div onClick={(event) => event.stopPropagation()}><Sidebar collapsed={collapsed} onToggle={() => setCollapsed((current) => !current)} onNavigate={() => setMobileOpen(false)} /></div></div><div className={`dashboard-main${collapsed ? ' sidebar-collapsed' : ''}`}><header className="dashboard-topbar"><div className="topbar-context"><Switcher label="Organization" value={currentOrganization?.name ?? ''} options={organizations} onChange={selectOrganization} /><span className="context-divider">/</span><Switcher label="Workspace" value={currentWorkspace?.name ?? ''} options={workspaces} onChange={selectWorkspace} /></div><UserMenu /></header><main className="dashboard-page"><div className="page-heading"><div><p className="eyebrow"><span className="eyebrow-dot" /> Workspace</p><h1>{pageTitle}</h1></div><div className="page-meta">{organizationRole ?? 'Member'} · {workspaceRole ?? 'Workspace access'}</div></div>{sessionExpired && <div className="dashboard-error" role="alert"><span>Your session expired. Sign in again to continue.</span><button type="button" onClick={() => { void leaveExpiredSession(); }}>Sign in</button></div>}{loading && !sessionExpired && <div className="dashboard-inline-status" role="status">Loading your workspace…</div>}{error && !sessionExpired && <div className="dashboard-error" role="alert"><span>{error}</span><button type="button" onClick={() => void reload()}>Try again</button></div>}{user && !sessionExpired && children}</main></div></div>;
 }

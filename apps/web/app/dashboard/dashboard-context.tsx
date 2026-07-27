@@ -3,8 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth, type OrganizationSummary, type WorkspaceSummary } from '../auth-provider';
+import { apiRequest } from '../api-client';
 
-type ApiEnvelope<T> = { success: boolean; message?: string; data?: T };
 type OrganizationWithMembership = OrganizationSummary;
 type DashboardContextValue = {
   organizations: OrganizationSummary[];
@@ -20,14 +20,10 @@ type DashboardContextValue = {
   reload: () => Promise<void>;
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { credentials: 'include', headers: { 'Content-Type': 'application/json' } });
-  const body = await response.json() as ApiEnvelope<T>;
-  if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'Unable to load workspace data.');
-  return body.data;
+  return apiRequest<T>(path);
 }
 
 function updateSelection(router: ReturnType<typeof useRouter>, pathname: string, organizationId: string, workspaceId: string | null): void {

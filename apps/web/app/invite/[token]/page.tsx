@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../auth-provider';
+import { apiRequest } from '../../api-client';
 
 type Invitation = { email: string; role: string; expiresAt: string; organization: { name: string }; workspace: { name: string }; inviterName: string };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-async function request<T>(path: string, init?: RequestInit): Promise<T> { const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } }); const body = await response.json() as { success: boolean; message?: string; data?: T }; if (!response.ok || !body.success) throw new Error(body.message ?? 'This invitation is unavailable.'); return body.data as T; }
+async function request<T>(path: string, init?: RequestInit): Promise<T> { return apiRequest<T>(path, init); }
 export default function InvitationPage() {
   const params = useParams<{ token: string }>(); const router = useRouter(); const { user, loading } = useAuth(); const [invitation, setInvitation] = useState<Invitation | null>(null); const [error, setError] = useState(''); const [accepting, setAccepting] = useState(false);
   useEffect(() => { const token = params.token; if (token) void request<Invitation>(`/workspace-invitations/validate?token=${encodeURIComponent(token)}`).then(setInvitation).catch((caught) => setError(caught instanceof Error ? caught.message : 'This invitation is unavailable.')); }, [params.token]);

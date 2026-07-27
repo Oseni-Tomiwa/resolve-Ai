@@ -3,16 +3,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth-provider';
 import { useDashboard } from '../dashboard-context';
+import { apiRequest } from '../../api-client';
 
 type Member = { user: { id: string; firstName: string; lastName: string; email: string; createdAt: string; organizationMemberships: Array<{ role: string }> }; role: string; createdAt: string };
 type Invitation = { id: string; email: string; role: string; expiresAt: string; createdAt: string; acceptedAt: string | null; revokedAt: string | null; localInvitationUrl?: string; invitedBy: { firstName: string; lastName: string; email: string } };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  const body = await response.json() as { success: boolean; message?: string; data?: T };
-  if (!response.ok || !body.success) throw new Error(body.message ?? 'The request could not be completed.');
-  return body.data as T;
+  return apiRequest<T>(path, init);
 }
 
 function date(value: string): string { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value)); }

@@ -4,17 +4,13 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useParams } from 'next/navigation';
 import { useDashboard } from '../../dashboard-context';
+import { apiFetch, apiRequest } from '../../../api-client';
 
 type Source = { id: string; number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean };
 type Message = { id: string; role: 'USER' | 'ASSISTANT' | 'SYSTEM'; content: string; status: string; errorCode?: string | null; agentName?: string | null; createdAt: string; sources: Source[] };
 type Detail = { conversation: { id: string; title: string; workspaceId: string; agent?: { id: string; name: string; description: string | null; greeting: string | null } | null }; messages: Message[]; hasMore: boolean };
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { ...init, credentials: 'include', headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  const body = await response.json() as { success: boolean; message?: string; data?: T };
-  if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'Unable to load this conversation.');
-  return body.data;
+  return apiRequest<T>(path, init);
 }
 
 type StreamEvent = { type: string; messageId?: string; delta?: string; sources?: Source[]; message?: Message; error?: { code: string; message: string } };
@@ -45,7 +41,7 @@ export default function ConversationDetailPage() {
     const content = draft.trim(); setDraft(''); setStreaming(true); setStreamingAnswer(''); setStreamingSources([]); setError('');
     const abort = new AbortController(); setController(abort);
     try {
-      const response = await fetch(`${apiBaseUrl}/workspaces/${currentWorkspace.id}/ai/conversations/${detail.conversation.id}/messages/stream`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body: JSON.stringify({ content }), signal: abort.signal });
+      const response = await apiFetch(`/workspaces/${currentWorkspace.id}/ai/conversations/${detail.conversation.id}/messages/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' }, body: JSON.stringify({ content }), signal: abort.signal });
       if (!response.ok || !response.body) throw new Error('Unable to start the grounded response.');
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = '';
       while (true) {
