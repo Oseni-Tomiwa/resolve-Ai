@@ -252,6 +252,9 @@ importers:
 
   packages/config:
     dependencies:
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -274,6 +277,12 @@ importers:
       '@prisma/client':
         specifier: ^6.1.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@resolveai/config':
+        specifier: workspace:*
+        version: link:../config
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
     devDependencies:
       '@resolveai/eslint-config':
         specifier: workspace:*

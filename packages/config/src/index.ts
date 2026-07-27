@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { config as loadDotenv } from 'dotenv';
+import { resolve } from 'node:path';
 
 export const generationModels = [{ id: 'gpt-4o-mini', label: 'GPT-4o mini' }] as const;
 export const embeddingModels = [{ id: 'text-embedding-3-small', label: 'text-embedding-3-small' }] as const;
@@ -37,3 +39,12 @@ export type AIEnvironment = EmbeddingEnv & GenerationEnv & { EMBEDDING_BATCH_SIZ
 export const loadAIEnv = (input: Record<string, string | undefined>): AIEnvironment => ({ ...loadEmbeddingEnv(input), ...loadGenerationEnv(input) });
 export type Env = z.infer<typeof envSchema>;
 export const loadEnv = (input: Record<string, string | undefined>): Env => envSchema.parse(input);
+
+export function loadRootEnv(): string {
+  const envFilePath = resolve(__dirname, '../../../.env');
+  loadDotenv({ path: envFilePath, override: false });
+  if (process.env.NODE_ENV !== 'production') {
+    console.info(JSON.stringify({ event: 'environment.loaded', cwd: process.cwd(), envFilePath, databaseUrlConfigured: Boolean(process.env.DATABASE_URL), nodeEnv: process.env.NODE_ENV ?? 'undefined' }));
+  }
+  return envFilePath;
+}

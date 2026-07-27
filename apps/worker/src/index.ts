@@ -1,15 +1,13 @@
-import { config } from 'dotenv';
 import { Worker } from 'bullmq';
-import { resolve } from 'node:path';
 import { prisma } from '@resolveai/database';
 import { LocalStorage } from '@resolveai/storage';
-import { loadEmbeddingEnv } from '@resolveai/config';
+import { loadEmbeddingEnv, loadRootEnv } from '@resolveai/config';
 import { chunkText } from './chunking.js';
 import { createProductionEmbeddingProvider, embedDocumentChunks } from './embedding.js';
 import { extractText } from './processing.js';
 import { processingErrorCategory } from './error-category.js';
 
-config({ path: resolve(process.cwd(), '../../.env') });
+loadRootEnv();
 
 const queueName = 'knowledge-processing';
 const connection = { url: process.env.REDIS_URL ?? 'redis://localhost:6379' };
