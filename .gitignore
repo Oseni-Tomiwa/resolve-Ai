@@ -7,3 +7,8 @@ dist
 .next
 coverage
 /storage
+.turbo/
+**/.turbo/
+**/.next/
+node_modules/
+.env
