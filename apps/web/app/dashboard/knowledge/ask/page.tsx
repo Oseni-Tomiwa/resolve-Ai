@@ -13,7 +13,7 @@ async function ask(workspaceId: string, question: string): Promise<AnswerRespons
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, documentIds: [] }),
   });
   const body = await response.json() as { success: boolean; message?: string; data?: AnswerResponse };
   if (!response.ok || !body.success || !body.data) throw new Error(body.message ?? 'Unable to generate a grounded answer.');

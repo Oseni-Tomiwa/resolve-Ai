@@ -8,7 +8,7 @@ describe('SemanticSearchService', () => {
   function setup() {
     const provider = new DeterministicEmbeddingProvider(4);
     const database = {
-      knowledgeDocument: { findMany: jest.fn().mockResolvedValue([{ id: 'doc-1' }]) },
+      knowledgeDocument: { findMany: jest.fn().mockResolvedValue([{ id: 'doc-1' }]), count: jest.fn().mockResolvedValue(1) },
       $queryRaw: jest.fn().mockResolvedValue([{ chunkId: 'chunk-1', chunkIndex: 2, content: 'Refunds are available within 30 days.', similarityScore: 0.91, documentId: 'doc-1', documentName: 'Refund policy', originalFileName: 'refunds.md', mimeType: 'text/markdown', characterStart: 0, characterEnd: 39, createdAt: new Date('2026-01-01T00:00:00.000Z') }]),
     };
     const workspaceAccess = { assertMember: jest.fn().mockResolvedValue(undefined) };

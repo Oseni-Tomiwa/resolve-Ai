@@ -20,7 +20,7 @@ type Access = { organizationId: string; organizationRole: string; workspaceRole:
 export class WorkspaceAccessService {
   constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly email: EmailService) {}
 
-  private async access(userId: string, workspaceId: string): Promise<Access> {
+  async getAccess(userId: string, workspaceId: string): Promise<Access> {
     const workspace = await this.db.workspace.findFirst({ where: { id: workspaceId }, select: { organizationId: true } });
     if (!workspace) throw new NotFoundException('Workspace not found');
     const [organizationMember, workspaceMember] = await Promise.all([
@@ -30,10 +30,10 @@ export class WorkspaceAccessService {
     if (!organizationMember || (!workspaceMember && !['OWNER', 'ADMIN'].includes(organizationMember.role))) throw new ForbiddenException('Workspace membership required');
     return { organizationId: workspace.organizationId, organizationRole: organizationMember.role, workspaceRole: workspaceMember?.role ?? '' };
   }
-  async assertMember(userId: string, workspaceId: string): Promise<void> { await this.access(userId, workspaceId); }
+  async assertMember(userId: string, workspaceId: string): Promise<void> { await this.getAccess(userId, workspaceId); }
 
   private async requireManager(userId: string, workspaceId: string): Promise<Access> {
-    const access = await this.access(userId, workspaceId);
+    const access = await this.getAccess(userId, workspaceId);
     if (!canManage(access.organizationRole, access.workspaceRole)) throw new ForbiddenException('Insufficient workspace permissions');
     return access;
   }
@@ -55,7 +55,7 @@ export class WorkspaceAccessService {
   }
 
   async listInvitations(userId: string, workspaceId: string) {
-    await this.access(userId, workspaceId);
+    await this.getAccess(userId, workspaceId);
     return this.db.workspaceInvitation.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, include: { invitedBy: { select: { firstName: true, lastName: true, email: true } } } });
   }
 
@@ -94,7 +94,7 @@ export class WorkspaceAccessService {
     });
   }
 
-  async listMembers(userId: string, workspaceId: string) { const access = await this.access(userId, workspaceId); return this.db.workspaceMember.findMany({ where: { workspaceId }, orderBy: { createdAt: 'asc' }, include: { user: { select: { id: true, firstName: true, lastName: true, email: true, createdAt: true, organizationMemberships: { where: { organizationId: access.organizationId }, select: { role: true } } } } } }); }
+  async listMembers(userId: string, workspaceId: string) { const access = await this.getAccess(userId, workspaceId); return this.db.workspaceMember.findMany({ where: { workspaceId }, orderBy: { createdAt: 'asc' }, include: { user: { select: { id: true, firstName: true, lastName: true, email: true, createdAt: true, organizationMemberships: { where: { organizationId: access.organizationId }, select: { role: true } } } } } }); }
 
   async updateMember(userId: string, workspaceId: string, memberId: string, dto: UpdateMemberRoleDto) {
     const access = await this.requireManager(userId, workspaceId);

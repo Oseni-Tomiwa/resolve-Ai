@@ -19,6 +19,24 @@ enum WorkspaceRole {
   VIEWER
 }
 
+enum AIConversationStatus {
+  ACTIVE
+}
+
+enum AIMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AIMessageStatus {
+  PENDING
+  STREAMING
+  COMPLETE
+  FAILED
+  CANCELLED
+}
+
 enum OrganizationIndustry {
   SAAS
   ECOMMERCE
@@ -51,6 +69,8 @@ model User {
   refreshTokens RefreshToken[]
   sentWorkspaceInvitations WorkspaceInvitation[] @relation("InvitationInviter")
   uploadedKnowledgeDocuments KnowledgeDocument[] @relation("DocumentUploader")
+  createdAIConversations AIConversation[] @relation("ConversationCreator")
+  authoredAIMessages AIMessage[] @relation("MessageAuthor")
 }
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -90,6 +110,9 @@ model Workspace {
   knowledgeDocuments KnowledgeDocument[]
   knowledgeChunks KnowledgeChunk[]
   knowledgeEmbeddings KnowledgeEmbedding[]
+  aiConversations AIConversation[]
+  aiMessages AIMessage[]
+  aiMessageSources AIMessageSource[]
   @@unique([organizationId, slug])
   @@index([organizationId])
 }
@@ -155,9 +178,11 @@ model KnowledgeDocument {
   uploadedBy User @relation("DocumentUploader", fields: [uploadedByUserId], references: [id], onDelete: Cascade)
   chunks KnowledgeChunk[]
   embeddings KnowledgeEmbedding[]
+  aiMessageSources AIMessageSource[]
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
   @@index([status])
+  @@unique([id, workspaceId])
 }
 
 model KnowledgeChunk {
@@ -174,10 +199,12 @@ model KnowledgeChunk {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   embeddings KnowledgeEmbedding[]
+  aiMessageSources AIMessageSource[]
   @@unique([documentId, chunkIndex])
   @@index([workspaceId])
   @@index([documentId])
   @@index([documentId, chunkIndex])
+  @@unique([id, workspaceId])
 }
 
 model KnowledgeEmbedding {
@@ -200,6 +227,71 @@ model KnowledgeEmbedding {
   @@index([documentId])
   @@index([chunkId])
   @@index([workspaceId, provider, model, dimensions])
+}
+
+model AIConversation {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  createdByUserId String @db.Uuid
+  title String @default("New conversation")
+  status AIConversationStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastMessageAt DateTime @default(now())
+  generationLockAt DateTime?
+  deletedAt DateTime?
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User @relation("ConversationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  messages AIMessage[]
+  @@unique([id, workspaceId])
+  @@index([workspaceId, lastMessageAt])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, deletedAt])
+}
+
+model AIMessage {
+  id String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  workspaceId String @db.Uuid
+  userId String? @db.Uuid
+  role AIMessageRole
+  content String
+  status AIMessageStatus
+  provider String?
+  model String?
+  inputTokens Int?
+  outputTokens Int?
+  errorCode String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  conversation AIConversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User? @relation("MessageAuthor", fields: [userId], references: [id], onDelete: SetNull)
+  sources AIMessageSource[]
+  @@unique([id, workspaceId])
+  @@index([conversationId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model AIMessageSource {
+  id String @id @default(uuid()) @db.Uuid
+  messageId String @db.Uuid
+  workspaceId String @db.Uuid
+  documentId String @db.Uuid
+  chunkId String @db.Uuid
+  sourceNumber Int
+  documentNameSnapshot String
+  chunkIndexSnapshot Int
+  contentPreview String
+  similarityScore Float
+  cited Boolean @default(false)
+  createdAt DateTime @default(now())
+  message AIMessage @relation(fields: [messageId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document KnowledgeDocument @relation(fields: [documentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  chunk KnowledgeChunk @relation(fields: [chunkId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  @@unique([messageId, sourceNumber])
+  @@index([workspaceId, createdAt])
 }
 model RefreshToken {
   id String @id @default(uuid()) @db.Uuid
