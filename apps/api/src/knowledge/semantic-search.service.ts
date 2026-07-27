@@ -59,6 +59,9 @@ export class SemanticSearchService {
       if (documentIds.some((documentId) => !validIds.has(documentId))) throw new BadRequestException('Every document filter must belong to this workspace and be active');
     }
 
+    const readyCount = await this.db.knowledgeDocument.count({ where: { workspaceId, status: 'READY', deletedAt: null, ...(documentIds.length > 0 ? { id: { in: documentIds } } : {}) } });
+    if (readyCount === 0) return { query, results: [] };
+
     const vectors = await this.embeddingProvider.embed([query]);
     const queryVector = vectors[0];
     if (!queryVector || queryVector.length !== this.embeddingProvider.dimensions || queryVector.some((value) => !Number.isFinite(value))) throw new ServiceUnavailableException('The embedding provider returned an invalid query vector');

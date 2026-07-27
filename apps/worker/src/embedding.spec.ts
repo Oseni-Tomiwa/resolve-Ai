@@ -1,5 +1,5 @@
 import { DeterministicEmbeddingProvider } from '@resolveai/ai';
-import { contentHash, embedDocumentChunks } from './embedding';
+import { contentHash, embedDocumentChunks } from './embedding.js';
 
 describe('embedDocumentChunks', () => {
   it('batches missing chunks and reuses matching content hashes', async () => {

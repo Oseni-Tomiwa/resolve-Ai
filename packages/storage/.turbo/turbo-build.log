@@ -1,0 +1,4 @@
+
+> @resolveai/storage@0.1.0 build /Users/mavery/Documents/New project/resolveai/packages/storage
+> tsc -p ./tsconfig.build.json
+

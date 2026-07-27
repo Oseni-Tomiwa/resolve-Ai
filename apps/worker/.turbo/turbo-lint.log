@@ -2,11 +2,14 @@
 > @resolveai/worker@0.1.0 lint /Users/mavery/Documents/New project/resolveai/apps/worker
 > pnpm exec eslint src
 
-[0m[0m
-[0m[4m/Users/mavery/Documents/New project/resolveai/apps/worker/src/index.ts[24m[0m
-[0m  [2m3:57[22m  [33mwarning[39m  Unexpected console statement  [2mno-console[22m[0m
-[0m  [2m4:37[22m  [33mwarning[39m  Unexpected console statement  [2mno-console[22m[0m
-[0m  [2m5:1[22m   [33mwarning[39m  Unexpected console statement  [2mno-console[22m[0m
-[0m[0m
-[0m[33m[1m✖ 3 problems (0 errors, 3 warnings)[22m[39m[0m
-[0m[33m[1m[22m[39m[0m
+
+/Users/mavery/Documents/New project/resolveai/apps/worker/src/index.ts
+  47:5   warning  Unexpected console statement  no-console
+  51:5   warning  Unexpected console statement  no-console
+  61:37  warning  Unexpected console statement  no-console
+  62:31  warning  Unexpected console statement  no-console
+  63:1   warning  Unexpected console statement  no-console
+  65:58  warning  Unexpected console statement  no-console
+
+✖ 6 problems (0 errors, 6 warnings)
+

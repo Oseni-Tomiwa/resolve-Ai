@@ -33,4 +33,17 @@ describe('DeterministicTextGenerationProvider', () => {
     expect(result.answer).toContain('[1]');
     expect(result.answer).not.toContain('API key');
   });
+
+  it('streams application-neutral deltas with a terminal completion event', async () => {
+    // Arrange
+    const provider = new DeterministicTextGenerationProvider();
+    const input = { question: 'What is the policy?', instructions: 'Use only the supplied sources.', context: '[Source 1]\nDocument: Policy\nChunk: 1\nContent:\nRefunds are available within 30 days.', maximumOutputTokens: 100 };
+    // Act
+    const events = [];
+    for await (const event of provider.streamGroundedAnswer(input)) events.push(event);
+    // Assert
+    expect(events[0]).toEqual({ type: 'response.started' });
+    expect(events.some((event) => event.type === 'response.delta')).toBe(true);
+    expect(events.at(-1)).toEqual({ type: 'response.completed', usage: { inputTokens: 0, outputTokens: 0 } });
+  });
 });

@@ -1,5 +1,5 @@
 import { loadGenerationEnv } from '@resolveai/config';
-import { OpenAITextGenerationProvider, type GroundedAnswerOutput, type TextGenerationProvider } from '@resolveai/ai';
+import { OpenAITextGenerationProvider, type GroundedAnswerInput, type GroundedAnswerOutput, type GenerationEvent, type TextGenerationProvider } from '@resolveai/ai';
 import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 // Nest dependency injection needs this constructor at runtime.
@@ -11,7 +11,8 @@ import { buildGroundedContext, groundedAnswerInstructions } from './grounded-pro
 export const GROUNDED_TEXT_PROVIDER = 'GROUNDED_TEXT_PROVIDER';
 const insufficientAnswer = 'I couldn’t find enough information in this workspace’s knowledge base to answer that.';
 const contextCharacterLimit = 12000;
-type Source = { number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean };
+export type GroundedSource = { number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean; chunkId: string };
+export type PreparedGroundedAnswer = { question: string; selected: Awaited<ReturnType<SemanticSearchService['search']>>['results']; sources: GroundedSource[]; context: string; instructions: string; maximumOutputTokens: number; insufficient: boolean };
 const generationEnv = () => { try { return loadGenerationEnv(process.env); } catch { throw new ServiceUnavailableException('Grounded answer generation configuration is invalid'); } };
 
 @Injectable()
@@ -22,6 +23,11 @@ export class EnvironmentTextGenerationProvider implements TextGenerationProvider
     const env = generationEnv();
     if (!env.OPENAI_API_KEY) throw new ServiceUnavailableException('Grounded answer generation is not configured');
     return new OpenAITextGenerationProvider({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_GENERATION_MODEL }).generateGroundedAnswer(input);
+  }
+  streamGroundedAnswer(input: Parameters<TextGenerationProvider['generateGroundedAnswer']>[0], signal?: AbortSignal): AsyncIterable<GenerationEvent> {
+    const env = generationEnv();
+    if (!env.OPENAI_API_KEY) throw new ServiceUnavailableException('Grounded answer generation is not configured');
+    return new OpenAITextGenerationProvider({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_GENERATION_MODEL }).streamGroundedAnswer(input, signal);
   }
 }
 
@@ -35,7 +41,21 @@ export class GroundedAnswerService {
   constructor(private readonly semanticSearch: SemanticSearchService, @Inject(GROUNDED_TEXT_PROVIDER) private readonly generationProvider: TextGenerationProvider) {}
 
   async answer(userId: string, workspaceId: string, input: GroundedAnswerDto) {
-    const question = input.question.trim();
+    const startedAt = Date.now();
+    const prepared = await this.prepare(userId, workspaceId, input.question, input.documentIds);
+    if (prepared.insufficient) {
+      console.info(JSON.stringify({ event: 'knowledge.answer', requestId: randomUUID(), workspaceId, userId, retrievedSourceCount: 0, model: null, latencyMs: Date.now() - startedAt, success: true, category: 'insufficient_context' }));
+      return { answer: insufficientAnswer, sources: [], provider: null, model: null, usage: { inputTokens: 0, outputTokens: 0 } };
+    }
+    const generated = await this.generate({ question: prepared.question, context: prepared.context, instructions: prepared.instructions, maximumOutputTokens: prepared.maximumOutputTokens });
+    const sources = this.sourcesFor(prepared, generated.citedSourceNumbers);
+    const requestId = randomUUID();
+    console.info(JSON.stringify({ event: 'knowledge.answer', requestId, workspaceId, userId, retrievedSourceCount: prepared.selected.length, model: generated.model, latencyMs: Date.now() - startedAt, inputTokens: generated.usage.inputTokens, outputTokens: generated.usage.outputTokens, success: true, category: 'generated' }));
+    return { answer: generated.answer, sources, provider: generated.provider, model: generated.model, usage: generated.usage };
+  }
+
+  async prepare(userId: string, workspaceId: string, rawQuestion: string, documentIds?: string[]): Promise<PreparedGroundedAnswer> {
+    const question = rawQuestion.trim();
     if (!question) throw new BadRequestException('Question cannot be empty');
     if (question.length > 1000) throw new BadRequestException('Question must be 1000 characters or fewer');
     const requestKey = `${userId}:${workspaceId}`;
@@ -43,22 +63,30 @@ export class GroundedAnswerService {
     if (now - (this.lastRequestAt.get(requestKey) ?? 0) < 2000) throw new HttpException('Please wait before asking another question', HttpStatus.TOO_MANY_REQUESTS);
     this.lastRequestAt.set(requestKey, now);
     const env = generationEnv();
-    const requestId = randomUUID();
-    const startedAt = Date.now();
-    const retrieval = await this.semanticSearch.search(userId, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds: input.documentIds });
+    const retrieval = await this.semanticSearch.search(userId, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds });
     const selected = [] as typeof retrieval.results;
     let contextLength = 0;
     for (const result of retrieval.results) { const normalized = normalizeForDeduplication(result.content); if (selected.some((candidate) => normalized === normalizeForDeduplication(candidate.content) || heavilyOverlaps(normalized, normalizeForDeduplication(candidate.content)))) continue; if (contextLength + result.content.length > contextCharacterLimit) break; selected.push(result); contextLength += result.content.length; }
-    if (selected.length === 0) { console.info(JSON.stringify({ event: 'knowledge.answer', requestId, workspaceId, userId, retrievedSourceCount: 0, model: null, latencyMs: Date.now() - startedAt, success: true, category: 'insufficient_context' })); return { answer: insufficientAnswer, sources: [], provider: null, model: null, usage: { inputTokens: 0, outputTokens: 0 } }; }
+    if (selected.length === 0) return { question, selected, sources: [], context: '', instructions: groundedAnswerInstructions, maximumOutputTokens: env.AI_MAX_OUTPUT_TOKENS, insufficient: true };
     const promptSources = selected.map((result, index) => ({ number: index + 1, documentName: result.document.name, chunkIndex: result.chunkIndex, content: result.content }));
-    const generated = await this.generate({ question, context: buildGroundedContext(promptSources), instructions: groundedAnswerInstructions, maximumOutputTokens: env.AI_MAX_OUTPUT_TOKENS });
-    const validCitationNumbers = new Set(generated.citedSourceNumbers.filter((number) => number >= 1 && number <= selected.length));
-    const sources: Source[] = selected.map((result, index) => ({ number: index + 1, documentId: result.document.id, documentName: result.document.name, chunkIndex: result.chunkIndex, contentPreview: preview(result.content), similarityScore: result.similarityScore, cited: validCitationNumbers.has(index + 1) }));
-    console.info(JSON.stringify({ event: 'knowledge.answer', requestId, workspaceId, userId, retrievedSourceCount: selected.length, model: generated.model, latencyMs: Date.now() - startedAt, inputTokens: generated.usage.inputTokens, outputTokens: generated.usage.outputTokens, success: true, category: 'generated' }));
-    return { answer: generated.answer, sources, provider: generated.provider, model: generated.model, usage: generated.usage };
+    return { question, selected, sources: [], context: buildGroundedContext(promptSources), instructions: groundedAnswerInstructions, maximumOutputTokens: env.AI_MAX_OUTPUT_TOKENS, insufficient: false };
   }
 
-  private async generate(input: Parameters<TextGenerationProvider['generateGroundedAnswer']>[0]): Promise<GroundedAnswerOutput> {
+  sourcesFor(prepared: PreparedGroundedAnswer, citedSourceNumbers: readonly number[]): GroundedSource[] {
+    const validCitationNumbers = new Set(citedSourceNumbers.filter((number) => number >= 1 && number <= prepared.selected.length));
+    return prepared.selected.map((result, index) => ({ number: index + 1, documentId: result.document.id, documentName: result.document.name, chunkIndex: result.chunkIndex, contentPreview: preview(result.content), similarityScore: result.similarityScore, cited: validCitationNumbers.has(index + 1), chunkId: result.chunkId }));
+  }
+
+  providerMetadata(): { provider: string; model: string } { return { provider: this.generationProvider.provider, model: this.generationProvider.model }; }
+
+  async completePrepared(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> { return this.generate(input); }
+
+  streamPrepared(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent> {
+    if (!this.generationProvider.streamGroundedAnswer) throw new ServiceUnavailableException('Streaming answer generation is not configured');
+    return this.generationProvider.streamGroundedAnswer({ ...input, instructions: groundedAnswerInstructions }, signal);
+  }
+
+  private async generate(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
     try { return await this.generationProvider.generateGroundedAnswer({ ...input, instructions: groundedAnswerInstructions }); } catch (error) { if (error instanceof ServiceUnavailableException) throw error; throw new ServiceUnavailableException('Grounded answer generation is currently unavailable'); }
   }
 }
