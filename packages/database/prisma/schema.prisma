@@ -37,6 +37,12 @@ enum AIMessageStatus {
   CANCELLED
 }
 
+enum AIAgentStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
 enum OrganizationIndustry {
   SAAS
   ECOMMERCE
@@ -70,6 +76,7 @@ model User {
   sentWorkspaceInvitations WorkspaceInvitation[] @relation("InvitationInviter")
   uploadedKnowledgeDocuments KnowledgeDocument[] @relation("DocumentUploader")
   createdAIConversations AIConversation[] @relation("ConversationCreator")
+  createdAIAgents AIAgent[] @relation("AgentCreator")
   authoredAIMessages AIMessage[] @relation("MessageAuthor")
 }
 model Organization {
@@ -111,6 +118,7 @@ model Workspace {
   knowledgeChunks KnowledgeChunk[]
   knowledgeEmbeddings KnowledgeEmbedding[]
   aiConversations AIConversation[]
+  aiAgents AIAgent[]
   aiMessages AIMessage[]
   aiMessageSources AIMessageSource[]
   @@unique([organizationId, slug])
@@ -240,12 +248,42 @@ model AIConversation {
   lastMessageAt DateTime @default(now())
   generationLockAt DateTime?
   deletedAt DateTime?
+  agentId String? @db.Uuid
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User @relation("ConversationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  agent AIAgent? @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
   messages AIMessage[]
   @@unique([id, workspaceId])
   @@index([workspaceId, lastMessageAt])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, deletedAt])
+}
+
+model AIAgent {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  createdByUserId String @db.Uuid
+  name String
+  slug String
+  description String?
+  instructions String
+  greeting String?
+  fallbackMessage String?
+  model String
+  temperature Float @default(0.2)
+  maxOutputTokens Int @default(800)
+  status AIAgentStatus @default(DRAFT)
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User @relation("AgentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  conversations AIConversation[]
+  @@unique([workspaceId, slug])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, isDefault])
   @@index([workspaceId, deletedAt])
 }
 
@@ -261,6 +299,8 @@ model AIMessage {
   model String?
   inputTokens Int?
   outputTokens Int?
+  agentId String? @db.Uuid
+  agentNameSnapshot String?
   errorCode String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -7,6 +7,7 @@ import { loadEmbeddingEnv } from '@resolveai/config';
 import { chunkText } from './chunking.js';
 import { createProductionEmbeddingProvider, embedDocumentChunks } from './embedding.js';
 import { extractText } from './processing.js';
+import { processingErrorCategory } from './error-category.js';
 
 config({ path: resolve(process.cwd(), '../../.env') });
 
@@ -42,15 +43,23 @@ async function processDocument(documentId: string, workspaceId: string): Promise
     });
     if (!committed) return;
     const embeddingEnv = loadEmbeddingEnv(process.env);
-    const result = await embedDocumentChunks(prisma, document.id, workspaceId, createProductionEmbeddingProvider(), embeddingEnv.EMBEDDING_BATCH_SIZE);
+    const result = await embedDocumentChunks(prisma, document.id, workspaceId, createProductionEmbeddingProvider(embeddingEnv), embeddingEnv.EMBEDDING_BATCH_SIZE);
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'READY', processingError: null } });
     console.info(JSON.stringify({ event: 'knowledge.document_ready', documentId, workspaceId, chunkCount: chunks.length, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
   } catch (error) {
-    const processingError = error instanceof Error ? error.message.slice(0, 240) : 'Document processing failed';
-    await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'FAILED', processingError } });
-    console.error(JSON.stringify({ event: 'knowledge.document_failed', documentId, workspaceId, error: processingError }));
+    const category = processingErrorCategory(error);
+    await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'FAILED', processingError: category } });
+    console.error(JSON.stringify({ event: 'knowledge.document_failed', documentId, workspaceId, category }));
     throw error;
   }
+}
+
+async function recoverInterruptedDocuments(): Promise<void> {
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000);
+  await prisma.knowledgeDocument.updateMany({
+    where: { status: { in: ['PROCESSING', 'EMBEDDING'] }, updatedAt: { lt: cutoff }, deletedAt: null },
+    data: { status: 'FAILED', processingError: 'WORKER_INTERRUPTED' },
+  });
 }
 
 const worker = new Worker(queueName, async (job) => {
@@ -58,8 +67,9 @@ const worker = new Worker(queueName, async (job) => {
   await processDocument(documentId, workspaceId);
 }, { connection, concurrency: 2 });
 
-worker.on('failed', (job, error) => console.error(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, error: error.message })));
-worker.on('error', (error) => console.error(JSON.stringify({ event: 'knowledge.worker_error', error: error.message })));
+worker.on('failed', (job, error) => console.error(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, category: processingErrorCategory(error) })));
+worker.on('error', (error) => console.error(JSON.stringify({ event: 'knowledge.worker_error', category: processingErrorCategory(error) })));
+void recoverInterruptedDocuments().catch(() => console.error(JSON.stringify({ event: 'knowledge.recovery_failed', category: 'DATABASE_UNAVAILABLE' })));
 console.info(JSON.stringify({ event: 'knowledge.worker_ready', queue: queueName }));
 
 async function shutdown(signal: string): Promise<void> { console.info(JSON.stringify({ event: 'knowledge.worker_shutdown', signal })); await worker.close(); await prisma.$disconnect(); }

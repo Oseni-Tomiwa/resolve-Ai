@@ -1,17 +1,2 @@
-
-> @resolveai/ai@0.1.0 test /Users/mavery/Documents/New project/resolveai/packages/ai
-> jest --config ./jest.config.cjs --runInBand
-
-PASS src/index.spec.ts
-  DeterministicEmbeddingProvider
-    ✓ returns stable normalized vectors without external calls (1 ms)
-    ✓ rejects vectors with the wrong count or dimensions (4 ms)
-  DeterministicTextGenerationProvider
-    ✓ does not follow instructions embedded in untrusted source text
-    ✓ streams application-neutral deltas with a terminal completion event
-
-Test Suites: 1 passed, 1 total
-Tests:       4 passed, 4 total
-Snapshots:   0 total
-Time:        0.244 s, estimated 1 s
-Ran all test suites.
+[ERROR] Refusing to run pnpm@9.15.0: its npm registry signature could not be verified (@pnpm/exe@9.15.0: fetch failed; @pnpm/macos-arm64@9.15.0: fetch failed; pnpm@9.15.0: fetch failed). The bytes selected by this project's lockfile/registry do not match a published, signed pnpm release.
+This can indicate a tampered lockfile or a malicious/unreachable registry. Set `pmOnFail` to `ignore` to skip the version switch if this is unexpected.

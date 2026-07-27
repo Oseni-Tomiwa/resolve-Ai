@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 
 export class CreateConversationDto {
   @IsOptional() @IsString() @MaxLength(120) title?: string;
+  @IsOptional() @IsUUID('4') agentId?: string;
 }
 
 export class UpdateConversationDto {

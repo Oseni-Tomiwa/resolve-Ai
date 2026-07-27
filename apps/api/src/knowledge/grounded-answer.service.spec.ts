@@ -2,6 +2,8 @@ import { DeterministicTextGenerationProvider, type GroundedAnswerInput, type Gro
 import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { GroundedAnswerService } from './grounded-answer.service';
 
+const config = { OPENAI_API_KEY: undefined, OPENAI_GENERATION_MODEL: 'gpt-4o-mini', AI_MAX_OUTPUT_TOKENS: 800, AI_RETRIEVAL_LIMIT: 5, AI_MINIMUM_SCORE: 0.65 };
+
 const retrieval = { query: 'What is the refund policy?', results: [{ chunkId: 'chunk-1', chunkIndex: 4, content: 'Customers may request a refund within 30 days.', similarityScore: 0.91, document: { id: 'doc-1', name: 'Refund Policy', originalFileName: 'refund.md', mimeType: 'text/markdown' }, characterStart: 10, characterEnd: 56, createdAt: new Date('2026-01-01T00:00:00.000Z') }] };
 
 describe('GroundedAnswerService', () => {
@@ -9,7 +11,7 @@ describe('GroundedAnswerService', () => {
     // Arrange
     const semanticSearch = { search: jest.fn().mockResolvedValue(retrieval) };
     const provider = new DeterministicTextGenerationProvider();
-    const service = new GroundedAnswerService(semanticSearch as never, provider);
+    const service = new GroundedAnswerService(semanticSearch as never, provider, config);
     // Act
     const result = await service.answer('user-1', 'workspace-1', { question: 'What is the refund policy?' });
     // Assert
@@ -22,7 +24,7 @@ describe('GroundedAnswerService', () => {
     // Arrange
     const semanticSearch = { search: jest.fn().mockResolvedValue({ query: 'unknown', results: [] }) };
     const provider = { provider: 'test', model: 'test', generateGroundedAnswer: jest.fn() } as unknown as TextGenerationProvider;
-    const service = new GroundedAnswerService(semanticSearch as never, provider);
+    const service = new GroundedAnswerService(semanticSearch as never, provider, config);
     // Act
     const result = await service.answer('user-1', 'workspace-1', { question: 'unknown' });
     // Assert
@@ -35,7 +37,7 @@ describe('GroundedAnswerService', () => {
     // Arrange
     const semanticSearch = { search: jest.fn().mockResolvedValue(retrieval) };
     const provider: TextGenerationProvider = { provider: 'test', model: 'test-v1', generateGroundedAnswer: jest.fn(async (input: GroundedAnswerInput): Promise<GroundedAnswerOutput> => ({ answer: 'Supported [1] and fabricated [999].', citedSourceNumbers: [1, 999], provider: 'test', model: 'test-v1', usage: { inputTokens: input.context.length, outputTokens: 4 } })) };
-    const service = new GroundedAnswerService(semanticSearch as never, provider);
+    const service = new GroundedAnswerService(semanticSearch as never, provider, config);
     // Act / Assert
     await expect(service.answer('user-1', 'workspace-1', { question: ' ' })).rejects.toThrow(BadRequestException);
     const result = await service.answer('user-1', 'workspace-1', { question: 'What is the refund policy?' });
@@ -47,7 +49,7 @@ describe('GroundedAnswerService', () => {
     // Arrange
     const semanticSearch = { search: jest.fn().mockResolvedValue(retrieval) };
     const provider: TextGenerationProvider = { provider: 'test', model: 'test-v1', generateGroundedAnswer: jest.fn().mockRejectedValue(new Error('provider timeout')) };
-    const service = new GroundedAnswerService(semanticSearch as never, provider);
+    const service = new GroundedAnswerService(semanticSearch as never, provider, config);
     // Act / Assert
     await expect(service.answer('user-1', 'workspace-1', { question: 'What is the refund policy?' })).rejects.toThrow(ServiceUnavailableException);
   });
