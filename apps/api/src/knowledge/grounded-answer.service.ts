@@ -12,7 +12,7 @@ export const GROUNDED_TEXT_PROVIDER = 'GROUNDED_TEXT_PROVIDER';
 export const GENERATION_CONFIG = 'GENERATION_CONFIG';
 const insufficientAnswer = 'I couldn’t find enough information in this workspace’s knowledge base to answer that.';
 const contextCharacterLimit = 12000;
-export type GroundedSource = { number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean; chunkId: string };
+export type GroundedSource = { id: string; number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean; chunkId: string };
 export type PreparedGroundedAnswer = { question: string; selected: Awaited<ReturnType<SemanticSearchService['search']>>['results']; sources: GroundedSource[]; context: string; instructions: string; maximumOutputTokens: number; model: string; temperature: number; insufficient: boolean };
 export type AgentGenerationOptions = { instructions?: string; fallbackMessage?: string | null; model?: string; temperature?: number; maxOutputTokens?: number };
 @Injectable()
@@ -78,14 +78,16 @@ export class GroundedAnswerService {
     const temperature = agent?.temperature ?? 0.2;
     const maximumOutputTokens = agent?.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS;
     const instructions = composeAgentInstructions(agent?.instructions);
+    console.info(JSON.stringify({ event: 'knowledge.grounded_context_retrieved', workspaceId, userId: userId ?? null, retrievedResultCount: retrieval.results.length, selectedSourceCount: selected.length, contextCharacterCount: contextLength, minimumScore: env.AI_MINIMUM_SCORE, publicAccess }));
     if (selected.length === 0) return { question, selected, sources: [], context: '', instructions, maximumOutputTokens, model, temperature, insufficient: true };
     const promptSources = selected.map((result, index) => ({ number: index + 1, documentName: result.document.name, chunkIndex: result.chunkIndex, content: result.content }));
+    console.info(JSON.stringify({ event: 'knowledge.grounded_prompt_constructed', workspaceId, userId: userId ?? null, sourceCount: promptSources.length, contextCharacterCount: contextLength, model, maximumOutputTokens, publicAccess }));
     return { question, selected, sources: [], context: buildGroundedContext(promptSources), instructions, maximumOutputTokens, model, temperature, insufficient: false };
   }
 
   sourcesFor(prepared: PreparedGroundedAnswer, citedSourceNumbers: readonly number[]): GroundedSource[] {
     const validCitationNumbers = new Set(citedSourceNumbers.filter((number) => number >= 1 && number <= prepared.selected.length));
-    return prepared.selected.map((result, index) => ({ number: index + 1, documentId: result.document.id, documentName: result.document.name, chunkIndex: result.chunkIndex, contentPreview: preview(result.content), similarityScore: result.similarityScore, cited: validCitationNumbers.has(index + 1), chunkId: result.chunkId }));
+    return prepared.selected.map((result, index) => ({ id: result.chunkId, number: index + 1, documentId: result.document.id, documentName: result.document.name, chunkIndex: result.chunkIndex, contentPreview: preview(result.content), similarityScore: result.similarityScore, cited: validCitationNumbers.has(index + 1), chunkId: result.chunkId }));
   }
 
   providerMetadata(): { provider: string; model: string } { return { provider: this.generationProvider.provider, model: this.generationProvider.model }; }
