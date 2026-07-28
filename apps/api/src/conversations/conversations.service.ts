@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs these constructors at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -9,6 +9,9 @@ import { WorkspaceAccessService } from '../workspace-access/workspace-access.ser
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AgentsService } from '../agents/agents.service';
 import type { ConversationDetailQueryDto, ConversationListQueryDto, CreateConversationDto, StreamMessageDto, UpdateConversationDto } from './dto';
+// Nest dependency injection needs this service constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { BillingUsageService } from '../billing/billing-usage.service';
 
 type ClientEvent =
   | { type: 'message.started'; messageId: string }
@@ -28,11 +31,12 @@ const titleFromMessage = (content: string): string => {
 
 @Injectable()
 export class ConversationsService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly workspaceAccess: WorkspaceAccessService, private readonly grounded: GroundedAnswerService, private readonly agents: AgentsService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly workspaceAccess: WorkspaceAccessService, private readonly grounded: GroundedAnswerService, private readonly agents: AgentsService, @Optional() private readonly billingUsage?: BillingUsageService) {}
 
   async create(userId: string, workspaceId: string, dto: CreateConversationDto) {
     const access = await this.workspaceAccess.getAccess(userId, workspaceId);
     if (!canWrite(access.organizationRole, access.workspaceRole)) throw new ForbiddenException('Viewers cannot create conversations');
+    await this.billingUsage?.assertCanConsume(workspaceId, 'CONVERSATIONS');
     const agent = dto.agentId ? await this.agents.requireActiveForConversation(userId, workspaceId, dto.agentId) : await this.agents.ensureDefault(workspaceId, userId);
     return this.db.aIConversation.create({ data: { workspaceId, createdByUserId: userId, agentId: agent.id, title: dto.title?.trim() || 'New conversation' }, select: { id: true, workspaceId: true, title: true, status: true, agent: { select: { id: true, name: true, description: true, greeting: true } }, createdAt: true, updatedAt: true, lastMessageAt: true } });
   }
@@ -79,6 +83,7 @@ export class ConversationsService {
     if (!canWrite(access.organizationRole, access.workspaceRole)) throw new ForbiddenException('Viewers cannot send messages');
     const content = dto.content.trim();
     if (!content) throw new BadRequestException('Message cannot be empty');
+    await this.billingUsage?.assertCanConsume(workspaceId, 'AI_REQUESTS');
     const conversation = await this.requireConversation(workspaceId, conversationId);
     const lockAt = new Date();
     const locked = await this.db.aIConversation.updateMany({ where: { id: conversation.id, workspaceId, deletedAt: null, OR: [{ generationLockAt: null }, { generationLockAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }] }, data: { generationLockAt: lockAt } });

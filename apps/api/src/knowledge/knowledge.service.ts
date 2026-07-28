@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
 import { LocalStorage } from '@resolveai/storage';
 import type { Express } from 'express';
@@ -7,6 +7,9 @@ import type { Express } from 'express';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { KnowledgeQueueService } from './knowledge-queue.service';
 import type { KnowledgeChunkQueryDto, KnowledgeListQueryDto } from './dto';
+// Nest dependency injection needs this service constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { BillingUsageService } from '../billing/billing-usage.service';
 
 const allowedMimeTypes = new Set(['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown']);
 const maxFileSize = 10 * 1024 * 1024;
@@ -18,7 +21,7 @@ type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'EMBEDDING' | 'READY' | 'FAILE
 @Injectable()
 export class KnowledgeService {
   private readonly storage = new LocalStorage(process.env.KNOWLEDGE_STORAGE_DIR);
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly queue: KnowledgeQueueService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly queue: KnowledgeQueueService, @Optional() private readonly billingUsage?: BillingUsageService) {}
 
   private async access(userId: string, workspaceId: string): Promise<Access> {
     const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
@@ -39,6 +42,8 @@ export class KnowledgeService {
     if (!file || !file.buffer || file.size === 0) throw new ConflictException('The uploaded file is empty');
     if (file.size > maxFileSize) throw new ConflictException('Files must be 10 MB or smaller');
     if (!allowedMimeTypes.has(file.mimetype)) throw new ConflictException('Unsupported file type. Use PDF, TXT, or Markdown.');
+    await this.billingUsage?.assertCanConsume(workspaceId, 'DOCUMENTS');
+    await this.billingUsage?.assertCanConsume(workspaceId, 'STORAGE', file.size);
     const id = randomUUID(); const originalFileName = file.originalname.normalize('NFKC').slice(0, 255); const storageKey = `knowledge/${workspaceId}/${id}/${safeName(originalFileName)}`;
     await this.storage.save(storageKey, file.buffer);
     try {

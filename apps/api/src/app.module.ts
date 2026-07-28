@@ -12,5 +12,26 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { AgentsModule } from './agents/agents.module';
 import { WidgetModule } from './widget/widget.module';
 import { InboxModule } from './inbox/inbox.module';
-@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule, WidgetModule, InboxModule] })
+import { BillingModule } from './billing/billing.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+
+@Module({
+  imports: [
+    DatabaseModule,
+    HealthModule,
+    AuthModule,
+    UsersModule,
+    OrganizationsModule,
+    WorkspacesModule,
+    OnboardingModule,
+    WorkspaceAccessModule,
+    KnowledgeModule,
+    AgentsModule,
+    ConversationsModule,
+    WidgetModule,
+    InboxModule,
+    BillingModule,
+    AnalyticsModule,
+  ],
+})
 export class AppModule {}

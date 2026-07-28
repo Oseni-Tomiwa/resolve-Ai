@@ -1,12 +1,15 @@
 import type { GenerationEnv } from '@resolveai/config';
 import { OpenAITextGenerationProvider, type GroundedAnswerInput, type GroundedAnswerOutput, type GenerationEvent, type TextGenerationProvider } from '@resolveai/ai';
-import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Inject, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { SemanticSearchService } from './semantic-search.service';
 import type { GroundedAnswerDto } from './grounded-answer.dto';
 import { buildGroundedContext, composeAgentInstructions } from './grounded-prompt';
+// Nest dependency injection needs this service constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { BillingUsageService } from '../billing/billing-usage.service';
 
 export const GROUNDED_TEXT_PROVIDER = 'GROUNDED_TEXT_PROVIDER';
 export const GENERATION_CONFIG = 'GENERATION_CONFIG';
@@ -37,10 +40,11 @@ const heavilyOverlaps = (left: string, right: string): boolean => { const shorte
 @Injectable()
 export class GroundedAnswerService {
   private readonly lastRequestAt = new Map<string, number>();
-  constructor(private readonly semanticSearch: SemanticSearchService, @Inject(GROUNDED_TEXT_PROVIDER) private readonly generationProvider: TextGenerationProvider, @Inject(GENERATION_CONFIG) private readonly config: GenerationEnv) {}
+  constructor(private readonly semanticSearch: SemanticSearchService, @Inject(GROUNDED_TEXT_PROVIDER) private readonly generationProvider: TextGenerationProvider, @Inject(GENERATION_CONFIG) private readonly config: GenerationEnv, @Optional() private readonly billingUsage?: BillingUsageService) {}
 
   async answer(userId: string, workspaceId: string, input: GroundedAnswerDto) {
     const startedAt = Date.now();
+    await this.billingUsage?.assertCanConsume(workspaceId, 'AI_REQUESTS');
     const prepared = await this.prepare(userId, workspaceId, input.question, input.documentIds);
     if (prepared.insufficient) {
       console.info(JSON.stringify({ event: 'knowledge.answer', requestId: randomUUID(), workspaceId, userId, retrievedSourceCount: 0, model: null, latencyMs: Date.now() - startedAt, success: true, category: 'insufficient_context' }));
@@ -84,6 +88,7 @@ export class GroundedAnswerService {
     console.info(JSON.stringify({ event: 'knowledge.grounded_context_retrieved', workspaceId, userId: userId ?? null, retrievedResultCount: retrieval.results.length, selectedSourceCount: selected.length, contextCharacterCount: contextLength, minimumScore: env.AI_MINIMUM_SCORE, publicAccess }));
     const requireCitations = agent?.requireCitations ?? true;
     if (selected.length === 0) return { question, selected, sources: [], context: '', instructions, maximumOutputTokens, model, temperature, topP, requireCitations, insufficient: true };
+    await this.billingUsage?.assertCanConsume(workspaceId, 'TOKENS', Math.ceil(contextLength / 4) + maximumOutputTokens);
     const promptSources = selected.map((result, index) => ({ number: index + 1, documentName: result.document.name, chunkIndex: result.chunkIndex, content: result.content }));
     console.info(JSON.stringify({ event: 'knowledge.grounded_prompt_constructed', workspaceId, userId: userId ?? null, sourceCount: promptSources.length, contextCharacterCount: contextLength, model, maximumOutputTokens, publicAccess }));
     return { question, selected, sources: [], context: buildGroundedContext(promptSources), instructions, maximumOutputTokens, model, temperature, topP, requireCitations, insufficient: false };
