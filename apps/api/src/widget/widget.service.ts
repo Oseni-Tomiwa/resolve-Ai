@@ -11,6 +11,7 @@ const maxMessagesPerSession = 100;
 const normalizeDomain = (value: string): string => value.trim().replace(/\/$/, '').toLowerCase();
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
 const preview = (value: string): string => value.replace(/\s+/g, ' ').trim().slice(0, 240);
+const agentDocumentSelection = { knowledgeDocuments: { select: { knowledgeDocumentId: true } } } as const;
 
 type OriginRequest = { headers?: { origin?: string; 'x-forwarded-for'?: string | string[] } };
 
@@ -72,7 +73,7 @@ export class WidgetService {
   }
 
   private async publicConfiguration(publicId: string, request: OriginRequest, requireEnabled = true) {
-    const configuration = await this.db.widgetConfiguration.findUnique({ where: { publicId }, include: { selectedAgent: { select: { id: true, name: true, description: true, greeting: true, instructions: true, fallbackMessage: true, model: true, temperature: true, maxOutputTokens: true, status: true, deletedAt: true } } } });
+    const configuration = await this.db.widgetConfiguration.findUnique({ where: { publicId }, include: { selectedAgent: { select: { id: true, name: true, description: true, greeting: true, instructions: true, fallbackMessage: true, model: true, temperature: true, topP: true, maxOutputTokens: true, requireCitations: true, groundedOnly: true, allowFollowUpQuestions: true, allowGeneralKnowledge: true, status: true, deletedAt: true, ...agentDocumentSelection } } } });
     if (!configuration || configuration.selectedAgent.status !== 'ACTIVE' || configuration.selectedAgent.deletedAt) throw new NotFoundException('Widget not found');
     this.assertOrigin(configuration, this.origin(request));
     if (requireEnabled && !configuration.enabled) throw new ForbiddenException('This widget is currently disabled');
@@ -101,7 +102,7 @@ export class WidgetService {
 
   async createConversation(publicId: string, dto: WidgetConversationDto, request: OriginRequest) {
     const { configuration, session } = await this.session(publicId, dto.sessionId, request);
-    const conversation = await this.db.widgetConversation.create({ data: { widgetConfigurationId: configuration.id, workspaceId: configuration.workspaceId, sessionId: session.id, agentId: configuration.selectedAgent.id, agentNameSnapshot: configuration.selectedAgent.name, title: dto.title.trim() || 'New visitor conversation' } });
+    const conversation = await this.db.widgetConversation.create({ data: { widgetConfigurationId: configuration.id, workspaceId: configuration.workspaceId, sessionId: session.id, agentId: configuration.selectedAgent.id, agentNameSnapshot: configuration.selectedAgent.name, title: dto.title.trim() || 'New visitor conversation', visitorPageUrl: session.pageUrl, visitorReferrer: session.referrer } });
     return { id: conversation.id, greeting: configuration.selectedAgent.greeting ?? configuration.greeting, agent: { name: configuration.selectedAgent.name } };
   }
 
@@ -109,7 +110,7 @@ export class WidgetService {
     const { configuration, session } = await this.session(publicId, sessionId, request);
     const conversation = await this.db.widgetConversation.findFirst({ where: { id: conversationId, sessionId: session.id, widgetConfigurationId: configuration.id }, include: { messages: { where: { status: { in: ['COMPLETE', 'FAILED', 'CANCELLED'] }, }, orderBy: { createdAt: 'asc' }, include: { sources: { orderBy: { sourceNumber: 'asc' } } } } } });
     if (!conversation) throw new NotFoundException('Conversation not found');
-    return conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, status: message.status, sources: message.sources.map((source) => ({ number: source.sourceNumber, documentName: source.documentNameSnapshot, contentPreview: source.contentPreview, cited: source.cited })) }));
+    return { status: conversation.status, mode: conversation.mode, messages: conversation.messages.map((message) => ({ id: message.id, role: message.role, content: message.content, status: message.status, createdAt: message.createdAt, sources: message.sources.map((source) => ({ number: source.sourceNumber, documentName: source.documentNameSnapshot, contentPreview: source.contentPreview, cited: source.cited })) })) };
   }
 
   async *streamMessage(publicId: string, conversationId: string, dto: WidgetMessageDto, request: OriginRequest): AsyncIterable<Record<string, unknown>> {
@@ -117,17 +118,20 @@ export class WidgetService {
     const content = dto.content.trim();
     if (!content) throw new BadRequestException('Message cannot be empty');
     this.assertRateLimit(`${publicId}:message:${this.clientKey(request)}`, 12, 60_000);
-    const conversation = await this.db.widgetConversation.findFirst({ where: { id: conversationId, sessionId: session.id, widgetConfigurationId: configuration.id }, include: { agent: true } });
+    const conversation = await this.db.widgetConversation.findFirst({ where: { id: conversationId, sessionId: session.id, widgetConfigurationId: configuration.id }, include: { agent: { include: agentDocumentSelection } } });
     if (!conversation) throw new NotFoundException('Conversation not found');
+    if (conversation.status === 'RESOLVED') { yield { type: 'conversation.resolved', message: 'This conversation has been resolved. Please start a new conversation if you need more help.' }; return; }
     const created = await this.db.$transaction(async (tx) => {
       const user = await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'USER', content, status: 'COMPLETE' } });
-      const assistant = await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'ASSISTANT', content: '', status: 'PENDING' } });
+      await tx.widgetConversation.update({ where: { id_workspaceId: { id: conversationId, workspaceId: configuration.workspaceId } }, data: { lastMessageAt: new Date() } });
+      const assistant = conversation.mode === 'AI' ? await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'ASSISTANT', content: '', status: 'PENDING' } }) : null;
       await tx.widgetSession.update({ where: { id: session.id }, data: { messageCount: { increment: 1 }, lastSeenAt: new Date() } });
       return { user, assistant };
     });
+    if (!created.assistant) { yield { type: 'message.completed', messageId: created.user.id, mode: 'HUMAN' }; return; }
     yield { type: 'message.started', messageId: created.assistant.id };
     try {
-      const prepared = await this.grounded.preparePublic(configuration.workspaceId, content, { instructions: conversation.agent.instructions, fallbackMessage: conversation.agent.fallbackMessage, model: conversation.agent.model, temperature: conversation.agent.temperature, maxOutputTokens: conversation.agent.maxOutputTokens });
+      const prepared = await this.grounded.preparePublic(configuration.workspaceId, content, { instructions: conversation.agent.instructions, fallbackMessage: conversation.agent.fallbackMessage, model: conversation.agent.model, temperature: conversation.agent.temperature, topP: conversation.agent.topP, maxOutputTokens: conversation.agent.maxOutputTokens, documentIds: conversation.agent.knowledgeDocuments?.map((item) => item.knowledgeDocumentId) ?? [], requireCitations: conversation.agent.requireCitations, groundedOnly: conversation.agent.groundedOnly, allowGeneralKnowledge: conversation.agent.allowGeneralKnowledge });
       if (prepared.insufficient) {
         const fallback = conversation.agent.fallbackMessage ?? 'I couldn’t find enough information in the workspace knowledge base to answer that.';
         await this.complete(created.assistant.id, configuration.workspaceId, fallback, null, prepared, []);
@@ -135,7 +139,7 @@ export class WidgetService {
       }
       await this.db.widgetMessage.update({ where: { id: created.assistant.id }, data: { status: 'STREAMING' } });
       const deltas: string[] = []; let usage = { inputTokens: 0, outputTokens: 0 };
-      for await (const event of this.grounded.streamPrepared({ question: prepared.question, context: prepared.context, instructions: prepared.instructions, maximumOutputTokens: prepared.maximumOutputTokens, model: prepared.model, temperature: prepared.temperature })) { if (event.type === 'response.delta') { deltas.push(event.delta); yield { type: 'message.delta', delta: event.delta }; } if (event.type === 'response.completed') usage = event.usage; if (event.type === 'response.failed') throw new Error('generation_failed'); }
+      for await (const event of this.grounded.streamPrepared({ question: prepared.question, context: prepared.context, instructions: prepared.instructions, maximumOutputTokens: prepared.maximumOutputTokens, model: prepared.model, temperature: prepared.temperature, topP: prepared.topP })) { if (event.type === 'response.delta') { deltas.push(event.delta); yield { type: 'message.delta', delta: event.delta }; } if (event.type === 'response.completed') usage = event.usage; if (event.type === 'response.failed') throw new Error('generation_failed'); }
       const answer = deltas.join('').trim(); const sources = this.grounded.sourcesFor(prepared, Array.from(answer.matchAll(/\[(\d+)\]/g), (match) => Number(match[1])));
       await this.complete(created.assistant.id, configuration.workspaceId, answer, this.grounded.providerMetadata().provider, prepared, sources, usage);
       yield { type: 'sources', sources: sources.map((source) => ({ number: source.number, documentName: source.documentName, contentPreview: source.contentPreview, cited: source.cited })) }; yield { type: 'message.completed', messageId: created.assistant.id };
@@ -143,6 +147,6 @@ export class WidgetService {
   }
 
   private async complete(messageId: string, workspaceId: string, content: string, provider: string | null, prepared: PreparedGroundedAnswer, sources: Array<{ number: number; documentId: string; chunkId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean }>, usage = { inputTokens: 0, outputTokens: 0 }): Promise<void> {
-    await this.db.$transaction(async (tx) => { await tx.widgetMessage.update({ where: { id: messageId }, data: { content, status: 'COMPLETE', provider, model: prepared.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens } }); if (sources.length) await tx.widgetMessageSource.createMany({ data: sources.map((source) => ({ messageId, workspaceId, documentId: source.documentId, chunkId: source.chunkId, sourceNumber: source.number, documentNameSnapshot: source.documentName, chunkIndexSnapshot: source.chunkIndex, contentPreview: preview(source.contentPreview), similarityScore: source.similarityScore, cited: source.cited })) }); });
+    await this.db.$transaction(async (tx) => { await tx.widgetMessage.update({ where: { id: messageId }, data: { content, status: 'COMPLETE', provider, model: prepared.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens } }); await tx.widgetConversation.update({ where: { id_workspaceId: { id: (await tx.widgetMessage.findUniqueOrThrow({ where: { id: messageId }, select: { conversationId: true } })).conversationId, workspaceId } }, data: { lastMessageAt: new Date() } }); if (sources.length) await tx.widgetMessageSource.createMany({ data: sources.map((source) => ({ messageId, workspaceId, documentId: source.documentId, chunkId: source.chunkId, sourceNumber: source.number, documentNameSnapshot: source.documentName, chunkIndexSnapshot: source.chunkIndex, contentPreview: preview(source.contentPreview), similarityScore: source.similarityScore, cited: source.cited })) }); });
   }
 }

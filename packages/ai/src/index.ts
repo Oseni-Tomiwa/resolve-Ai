@@ -16,6 +16,7 @@ export type GroundedAnswerInput = {
   maximumOutputTokens: number;
   model?: string;
   temperature?: number;
+  topP?: number;
 };
 
 export type GroundedAnswerOutput = {
@@ -100,14 +101,14 @@ export class OpenAITextGenerationProvider implements TextGenerationProvider {
 
   async generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerOutput> {
     const model = input.model ?? this.model;
-    const response = await this.client.responses.create({ model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, max_output_tokens: input.maximumOutputTokens });
+    const response = await this.client.responses.create({ model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, top_p: input.topP ?? 1, max_output_tokens: input.maximumOutputTokens });
     const answer = response.output_text.trim();
     if (!answer) throw new Error('Text generation provider returned an empty answer');
     return { answer, citedSourceNumbers: citedNumbers(answer), provider: this.provider, model, usage: { inputTokens: response.usage?.input_tokens ?? 0, outputTokens: response.usage?.output_tokens ?? 0 } };
   }
 
   async *streamGroundedAnswer(input: GroundedAnswerInput, signal?: AbortSignal): AsyncIterable<GenerationEvent> {
-    const stream = await this.client.responses.create({ model: input.model ?? this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, max_output_tokens: input.maximumOutputTokens, stream: true });
+    const stream = await this.client.responses.create({ model: input.model ?? this.model, instructions: input.instructions, input: formatGenerationInput(input), temperature: input.temperature ?? 0.2, top_p: input.topP ?? 1, max_output_tokens: input.maximumOutputTokens, stream: true });
     yield { type: 'response.started' };
     let usage = { inputTokens: 0, outputTokens: 0 };
     try {
