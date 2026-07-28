@@ -70,12 +70,14 @@ export class SemanticSearchService {
     }
 
     const readyCount = await this.db.knowledgeDocument.count({ where: { workspaceId, status: 'READY', deletedAt: null, ...(documentIds.length > 0 ? { id: { in: documentIds } } : {}) } });
+    console.info(JSON.stringify({ event: 'knowledge.semantic_search_started', workspaceId, queryLength: query.length, documentFilterCount: documentIds.length, readyDocumentCount: readyCount, provider: this.embeddingProvider.provider, model: this.embeddingProvider.model, dimensions: this.embeddingProvider.dimensions }));
     if (readyCount === 0) return { query, results: [] };
 
     const vectors = await this.embeddingProvider.embed([query]);
     const queryVector = vectors[0];
     if (!queryVector || queryVector.length !== this.embeddingProvider.dimensions || queryVector.some((value) => !Number.isFinite(value))) throw new ServiceUnavailableException('The embedding provider returned an invalid query vector');
-    const documentFilter = documentIds.length > 0 ? Prisma.sql`AND d."id" IN (${Prisma.join(documentIds)})` : Prisma.empty;
+    console.info(JSON.stringify({ event: 'knowledge.query_embedding_generated', workspaceId, vectorCount: vectors.length, dimensions: queryVector.length, provider: this.embeddingProvider.provider, model: this.embeddingProvider.model }));
+    const documentFilter = documentIds.length > 0 ? Prisma.sql`AND d."id" IN (${Prisma.join(documentIds.map((documentId) => Prisma.sql`${documentId}::uuid`))})` : Prisma.empty;
     const vector = vectorLiteral(queryVector);
     const rows = await this.db.$queryRaw<SearchRow[]>(Prisma.sql`
       SELECT ranked."chunkId", ranked."chunkIndex", ranked."content", ranked."similarityScore", ranked."documentId", ranked."documentName", ranked."originalFileName", ranked."mimeType", ranked."characterStart", ranked."characterEnd", ranked."createdAt"
@@ -98,6 +100,8 @@ export class SemanticSearchService {
       ORDER BY ranked."similarityScore" DESC, ranked."chunkIndex" ASC
       LIMIT ${limit}
     `);
-    return { query, results: rows.map((row) => ({ chunkId: row.chunkId, chunkIndex: row.chunkIndex, content: row.content, similarityScore: clampScore(Number(row.similarityScore)), document: { id: row.documentId, name: row.documentName, originalFileName: row.originalFileName, mimeType: row.mimeType }, characterStart: row.characterStart, characterEnd: row.characterEnd, createdAt: row.createdAt })) };
+    const results = rows.map((row) => ({ chunkId: row.chunkId, chunkIndex: row.chunkIndex, content: row.content, similarityScore: clampScore(Number(row.similarityScore)), document: { id: row.documentId, name: row.documentName, originalFileName: row.originalFileName, mimeType: row.mimeType }, characterStart: row.characterStart, characterEnd: row.characterEnd, createdAt: row.createdAt }));
+    console.info(JSON.stringify({ event: 'knowledge.semantic_search_completed', workspaceId, resultCount: results.length, minimumScore, limit }));
+    return { query, results };
   }
 }

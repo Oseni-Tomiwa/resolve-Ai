@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { useDashboard } from '../../dashboard-context';
 import { apiFetch, apiRequest } from '../../../api-client';
 
-type Source = { id: string; number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean };
+type Source = { id: string; number: number; documentId: string; chunkId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean };
 type Message = { id: string; role: 'USER' | 'ASSISTANT' | 'SYSTEM'; content: string; status: string; errorCode?: string | null; agentName?: string | null; createdAt: string; sources: Source[] };
 type Detail = { conversation: { id: string; title: string; workspaceId: string; agent?: { id: string; name: string; description: string | null; greeting: string | null } | null }; messages: Message[]; hasMore: boolean };
 async function api<T>(path: string, init?: RequestInit): Promise<T> {

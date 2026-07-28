@@ -16,11 +16,14 @@ const storage = new LocalStorage(process.env.KNOWLEDGE_STORAGE_DIR);
 async function processDocument(documentId: string, workspaceId: string): Promise<void> {
   const document = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, workspaceId, deletedAt: null } });
   if (!document) return;
+  console.info(JSON.stringify({ event: 'knowledge.document_processing_started', documentId, workspaceId, mimeType: document.mimeType }));
   await prisma.knowledgeDocument.update({ where: { id: document.id }, data: { status: 'PROCESSING', processingError: null } });
   try {
     const text = await extractText(document.mimeType, await storage.read(document.storageKey));
+    console.info(JSON.stringify({ event: 'knowledge.document_extracted', documentId, workspaceId, characterCount: text.length }));
     const chunks = chunkText(text);
     if (chunks.length === 0) throw new Error('No readable text was found in this document');
+    console.info(JSON.stringify({ event: 'knowledge.document_chunked', documentId, workspaceId, chunkCount: chunks.length }));
     const committed = await prisma.$transaction(async (tx) => {
       const current = await tx.knowledgeDocument.findFirst({ where: { id: document.id, workspaceId, deletedAt: null }, select: { id: true } });
       if (!current) return false;
@@ -40,8 +43,12 @@ async function processDocument(documentId: string, workspaceId: string): Promise
       return true;
     });
     if (!committed) return;
+    console.info(JSON.stringify({ event: 'knowledge.document_chunks_persisted', documentId, workspaceId, chunkCount: chunks.length }));
     const embeddingEnv = loadEmbeddingEnv(process.env);
-    const result = await embedDocumentChunks(prisma, document.id, workspaceId, createProductionEmbeddingProvider(embeddingEnv), embeddingEnv.EMBEDDING_BATCH_SIZE);
+    const embeddingProvider = createProductionEmbeddingProvider(embeddingEnv);
+    console.info(JSON.stringify({ event: 'knowledge.embedding_generation_started', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, batchSize: embeddingEnv.EMBEDDING_BATCH_SIZE, chunkCount: chunks.length }));
+    const result = await embedDocumentChunks(prisma, document.id, workspaceId, embeddingProvider, embeddingEnv.EMBEDDING_BATCH_SIZE);
+    console.info(JSON.stringify({ event: 'knowledge.embedding_generation_completed', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'READY', processingError: null } });
     console.info(JSON.stringify({ event: 'knowledge.document_ready', documentId, workspaceId, chunkCount: chunks.length, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
   } catch (error) {

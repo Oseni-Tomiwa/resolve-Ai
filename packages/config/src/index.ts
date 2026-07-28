@@ -31,7 +31,7 @@ export const generationEnvSchema = z.object({
   OPENAI_GENERATION_MODEL: z.enum(generationModelIds).default('gpt-4o-mini'),
   AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(128).max(2000).default(800),
   AI_RETRIEVAL_LIMIT: z.coerce.number().int().min(1).max(20).default(5),
-  AI_MINIMUM_SCORE: z.coerce.number().min(0).max(1).default(0.65),
+  AI_MINIMUM_SCORE: z.coerce.number().min(0).max(1).default(0.4),
 });
 export type GenerationEnv = z.infer<typeof generationEnvSchema>;
 export const loadGenerationEnv = (input: Record<string, string | undefined>): GenerationEnv => generationEnvSchema.parse(input);
