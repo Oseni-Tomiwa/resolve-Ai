@@ -1,9 +1,12 @@
 "use strict";
 (() => {
-    const script = document.currentScript;
+    const script = document.currentScript ?? Array.from(document.scripts).find((candidate) => candidate.src.endsWith('/widget.js') && candidate.dataset.resolveaiWidgetId && candidate.dataset.resolveaiInitialized !== 'true') ?? null;
     const widgetId = script?.dataset.resolveaiWidgetId;
     if (!widgetId)
         return;
+    if (script?.dataset.resolveaiInitialized === 'true')
+        return;
+    script.dataset.resolveaiInitialized = 'true';
     const apiBase = (script?.dataset.resolveaiApi ?? 'http://localhost:4000/api/v1').replace(/\/$/, '');
     const storageKey = `resolveai.widget.${widgetId}`;
     let config = null;
@@ -63,7 +66,7 @@
     wrap.append(panel, launcher);
     shadow.appendChild(wrap);
     const setError = (message = '') => { error.textContent = message; error.hidden = !message; };
-    const render = () => { list.replaceChildren(...messages.map((message) => { const item = document.createElement('article'); item.className = `msg ${message.role === 'USER' ? 'user' : ''}`; item.textContent = message.content; if (message.sources?.length) {
+    const render = () => { list.replaceChildren(...messages.map((message) => { const item = document.createElement('article'); item.className = `msg ${message.role === 'USER' ? 'user' : ''}`; item.textContent = message.role === 'HUMAN' ? `Support teammate: ${message.content}` : message.content; if (message.sources?.length) {
         const sources = document.createElement('div');
         sources.className = 'sources';
         message.sources.forEach((source) => { const row = document.createElement('div'); const citation = document.createElement('b'); citation.textContent = `[${source.number}]`; row.append(citation, document.createTextNode(` ${source.documentName}`)); sources.appendChild(row); });
@@ -72,11 +75,35 @@
     const request = async (path, init) => { const response = await fetch(`${apiBase}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } }); const body = await response.json(); if (!response.ok || !body.success)
         throw new Error(body.message ?? 'The support chat is unavailable.'); return body.data; };
     const save = () => localStorage.setItem(storageKey, JSON.stringify({ sessionId, conversationId }));
+    const merge = (incoming) => { const byId = new Map(messages.filter((message) => message.id).map((message) => [message.id, message])); for (const message of incoming) {
+        const temporary = messages.find((current) => current.id?.startsWith('temp-') && current.role === message.role && current.content === message.content);
+        if (temporary?.id)
+            byId.delete(temporary.id);
+        if (message.id)
+            byId.set(message.id, message);
+        else
+            messages.push(message);
+    } messages = Array.from(byId.values()); };
+    let pollTimer;
+    const refreshMessages = async () => { if (!sessionId || !conversationId || document.hidden)
+        return; const response = await request(`/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages?sessionId=${encodeURIComponent(sessionId)}`); merge(response.messages); input.disabled = response.status === 'RESOLVED'; send.disabled = input.disabled; render(); };
+    const startPolling = () => { if (!pollTimer)
+        pollTimer = window.setInterval(() => { void refreshMessages().catch(() => undefined); }, 2500); };
+    const stopPolling = () => { if (pollTimer) {
+        window.clearInterval(pollTimer);
+        pollTimer = undefined;
+    } };
+    document.addEventListener('visibilitychange', () => { if (document.hidden)
+        stopPolling();
+    else if (open) {
+        void refreshMessages();
+        startPolling();
+    } });
     const initialize = async () => { try {
         config = await request(`/public/widgets/${encodeURIComponent(widgetId)}/config`);
         if (!config.enabled) {
             launcher.remove();
-            return;
+            throw new Error('This widget is disabled.');
         }
         wrap.style.setProperty('--accent', config.accentColor);
         wrap.className = `wrap ${config.position === 'BOTTOM_LEFT' ? 'left' : 'right'}`;
@@ -92,7 +119,10 @@
         sessionId = session.sessionId;
         if (saved.conversationId) {
             conversationId = saved.conversationId;
-            messages = await request(`/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages?sessionId=${encodeURIComponent(sessionId)}`);
+            const response = await request(`/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages?sessionId=${encodeURIComponent(sessionId)}`);
+            messages = response.messages;
+            input.disabled = response.status === 'RESOLVED';
+            send.disabled = input.disabled;
         }
         else {
             const conversation = await request(`/public/widgets/${encodeURIComponent(widgetId)}/conversations`, { method: 'POST', body: JSON.stringify({ sessionId, title: 'Visitor support conversation' }) });
@@ -101,18 +131,25 @@
         }
         save();
         render();
+        window.dispatchEvent(new CustomEvent('resolveai-widget-ready', { detail: { publicId: widgetId } }));
     }
     catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'The support chat is unavailable.');
+        const message = caught instanceof Error ? caught.message : 'The support chat is unavailable.';
+        setError(message);
+        window.dispatchEvent(new CustomEvent('resolveai-widget-error', { detail: { publicId: widgetId, message } }));
     } };
-    const toggle = () => { open = !open; panel.classList.toggle('hidden', !open); launcher.setAttribute('aria-expanded', String(open)); if (open)
-        input.focus(); };
+    const toggle = () => { open = !open; panel.classList.toggle('hidden', !open); launcher.setAttribute('aria-expanded', String(open)); if (open) {
+        input.focus();
+        startPolling();
+    }
+    else
+        stopPolling(); };
     launcher.addEventListener('click', toggle);
     close.addEventListener('click', toggle);
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && open)
         toggle(); });
     composer.addEventListener('submit', async (event) => { event.preventDefault(); const content = input.value.trim(); if (!content || busy || !conversationId)
-        return; busy = true; setError(); input.value = ''; messages.push({ role: 'USER', content }, { role: 'ASSISTANT', content: '' }); render(); const assistant = messages[messages.length - 1]; try {
+        return; busy = true; setError(); input.value = ''; messages.push({ id: `temp-${Date.now()}`, role: 'USER', content }, { id: `temp-${Date.now()}-assistant`, role: 'ASSISTANT', content: '' }); render(); const assistant = messages[messages.length - 1]; try {
         const response = await fetch(`${apiBase}/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, content }) });
         if (!response.ok || !response.body)
             throw new Error('The support assistant is unavailable.');
@@ -134,11 +171,15 @@
                     assistant.content += event.delta ?? '';
                 if (event.type === 'sources')
                     assistant.sources = event.sources;
+                if (event.type === 'message.completed' && event.mode === 'HUMAN' && assistant.content === '')
+                    messages.pop();
                 if (event.type === 'message.failed')
                     throw new Error(event.error?.message ?? 'The support assistant could not complete this response.');
                 render();
             }
         }
+        if (messages.some((message) => message.id?.startsWith('temp-') && message.role === 'USER'))
+            await refreshMessages();
     }
     catch (caught) {
         assistant.content = '';

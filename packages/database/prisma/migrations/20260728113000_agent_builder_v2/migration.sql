@@ -1,0 +1,9 @@
+ALTER TYPE "AIAgentStatus" ADD VALUE 'ARCHIVED';
+ALTER TABLE "AIAgent" ADD COLUMN "allowFollowUpQuestions" BOOLEAN NOT NULL DEFAULT true, ADD COLUMN "allowGeneralKnowledge" BOOLEAN NOT NULL DEFAULT false, ADD COLUMN "groundedOnly" BOOLEAN NOT NULL DEFAULT true, ADD COLUMN "publishedAt" TIMESTAMP(3), ADD COLUMN "publishedByUserId" UUID, ADD COLUMN "requireCitations" BOOLEAN NOT NULL DEFAULT true, ADD COLUMN "topP" DOUBLE PRECISION NOT NULL DEFAULT 1;
+CREATE TABLE "AgentKnowledgeDocument" ("agentId" UUID NOT NULL, "knowledgeDocumentId" UUID NOT NULL, "workspaceId" UUID NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "AgentKnowledgeDocument_pkey" PRIMARY KEY ("agentId","knowledgeDocumentId"));
+CREATE INDEX "AgentKnowledgeDocument_workspaceId_knowledgeDocumentId_idx" ON "AgentKnowledgeDocument"("workspaceId", "knowledgeDocumentId");
+CREATE INDEX "AgentKnowledgeDocument_workspaceId_agentId_idx" ON "AgentKnowledgeDocument"("workspaceId", "agentId");
+ALTER TABLE "AIAgent" ADD CONSTRAINT "AIAgent_publishedByUserId_fkey" FOREIGN KEY ("publishedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "AgentKnowledgeDocument" ADD CONSTRAINT "AgentKnowledgeDocument_agentId_workspaceId_fkey" FOREIGN KEY ("agentId", "workspaceId") REFERENCES "AIAgent"("id", "workspaceId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AgentKnowledgeDocument" ADD CONSTRAINT "AgentKnowledgeDocument_knowledgeDocumentId_workspaceId_fkey" FOREIGN KEY ("knowledgeDocumentId", "workspaceId") REFERENCES "KnowledgeDocument"("id", "workspaceId") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "AgentKnowledgeDocument" ADD CONSTRAINT "AgentKnowledgeDocument_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;

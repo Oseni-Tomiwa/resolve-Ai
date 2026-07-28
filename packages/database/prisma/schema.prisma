@@ -29,6 +29,37 @@ enum AIMessageRole {
   SYSTEM
 }
 
+enum WidgetMessageRole {
+  USER
+  ASSISTANT
+  HUMAN
+  SYSTEM
+}
+
+enum SupportConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+enum SupportConversationMode {
+  AI
+  HUMAN
+}
+
+enum SupportConversationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum SupportConversationSource {
+  WIDGET
+  DASHBOARD
+  API
+}
+
 enum AIMessageStatus {
   PENDING
   STREAMING
@@ -41,6 +72,7 @@ enum AIAgentStatus {
   DRAFT
   ACTIVE
   DISABLED
+  ARCHIVED
 }
 
 enum WidgetPosition {
@@ -82,7 +114,12 @@ model User {
   uploadedKnowledgeDocuments KnowledgeDocument[] @relation("DocumentUploader")
   createdAIConversations AIConversation[] @relation("ConversationCreator")
   createdAIAgents AIAgent[] @relation("AgentCreator")
+  publishedAIAgents AIAgent[] @relation("AgentPublisher")
   authoredAIMessages AIMessage[] @relation("MessageAuthor")
+  assignedWidgetConversations WidgetConversation[] @relation("WidgetAssignee")
+  resolvedWidgetConversations WidgetConversation[] @relation("WidgetResolver")
+  widgetConversationReads WidgetConversationRead[]
+  widgetConversationNotes WidgetConversationNote[]
 }
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -124,12 +161,15 @@ model Workspace {
   knowledgeEmbeddings KnowledgeEmbedding[]
   aiConversations AIConversation[]
   aiAgents AIAgent[]
+  agentKnowledgeDocuments AgentKnowledgeDocument[]
   aiMessages AIMessage[]
   widgetConfiguration WidgetConfiguration?
   widgetSessions WidgetSession[]
   widgetConversations WidgetConversation[]
   widgetMessages WidgetMessage[]
   widgetMessageSources WidgetMessageSource[]
+  widgetConversationReads WidgetConversationRead[]
+  widgetConversationNotes WidgetConversationNote[]
   aiMessageSources AIMessageSource[]
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -198,6 +238,7 @@ model KnowledgeDocument {
   embeddings KnowledgeEmbedding[]
   aiMessageSources AIMessageSource[]
   widgetMessageSources WidgetMessageSource[]
+  agentKnowledgeDocuments AgentKnowledgeDocument[]
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
   @@index([status])
@@ -283,22 +324,44 @@ model AIAgent {
   fallbackMessage String?
   model String
   temperature Float @default(0.2)
+  topP Float @default(1)
   maxOutputTokens Int @default(800)
+  requireCitations Boolean @default(true)
+  groundedOnly Boolean @default(true)
+  allowFollowUpQuestions Boolean @default(true)
+  allowGeneralKnowledge Boolean @default(false)
   status AIAgentStatus @default(DRAFT)
   isDefault Boolean @default(false)
+  publishedAt DateTime?
+  publishedByUserId String? @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   createdBy User @relation("AgentCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy User? @relation("AgentPublisher", fields: [publishedByUserId], references: [id], onDelete: SetNull)
   conversations AIConversation[]
   widgetConfigurations WidgetConfiguration[]
   widgetConversations WidgetConversation[]
+  knowledgeDocuments AgentKnowledgeDocument[]
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
   @@index([workspaceId, status])
   @@index([workspaceId, isDefault])
   @@index([workspaceId, deletedAt])
+}
+
+model AgentKnowledgeDocument {
+  agentId String @db.Uuid
+  knowledgeDocumentId String @db.Uuid
+  workspaceId String @db.Uuid
+  createdAt DateTime @default(now())
+  agent AIAgent @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  knowledgeDocument KnowledgeDocument @relation(fields: [knowledgeDocumentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@id([agentId, knowledgeDocumentId])
+  @@index([workspaceId, knowledgeDocumentId])
+  @@index([workspaceId, agentId])
 }
 
 model WidgetConfiguration {
@@ -348,15 +411,30 @@ model WidgetConversation {
   agentId String @db.Uuid
   agentNameSnapshot String
   title String @default("New visitor conversation")
+  status SupportConversationStatus @default(OPEN)
+  mode SupportConversationMode @default(AI)
+  priority SupportConversationPriority @default(NORMAL)
+  assignedUserId String? @db.Uuid
+  source SupportConversationSource @default(WIDGET)
+  visitorPageUrl String?
+  visitorReferrer String?
+  lastMessageAt DateTime @default(now())
+  resolvedAt DateTime?
+  resolvedByUserId String? @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   widgetConfiguration WidgetConfiguration @relation(fields: [widgetConfigurationId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   session WidgetSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   agent AIAgent @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  assignedUser User? @relation("WidgetAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  resolvedBy User? @relation("WidgetResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
   messages WidgetMessage[]
+  reads WidgetConversationRead[]
+  notes WidgetConversationNote[]
   @@unique([id, workspaceId])
-  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, lastMessageAt])
+  @@index([workspaceId, assignedUserId])
   @@index([sessionId, createdAt])
 }
 
@@ -364,7 +442,7 @@ model WidgetMessage {
   id String @id @default(uuid()) @db.Uuid
   conversationId String @db.Uuid
   workspaceId String @db.Uuid
-  role AIMessageRole
+  role WidgetMessageRole
   content String
   status AIMessageStatus
   provider String?
@@ -374,10 +452,38 @@ model WidgetMessage {
   errorCode String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  clientMessageId String?
   conversation WidgetConversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sources WidgetMessageSource[]
   @@unique([id, workspaceId])
+  @@index([conversationId, createdAt])
+  @@unique([conversationId, clientMessageId])
+}
+
+model WidgetConversationRead {
+  id String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  workspaceId String @db.Uuid
+  userId String @db.Uuid
+  readAt DateTime @default(now())
+  conversation WidgetConversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([conversationId, userId])
+  @@index([workspaceId, userId, readAt])
+}
+
+model WidgetConversationNote {
+  id String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  workspaceId String @db.Uuid
+  authorUserId String @db.Uuid
+  content String
+  createdAt DateTime @default(now())
+  conversation WidgetConversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
   @@index([conversationId, createdAt])
 }
 

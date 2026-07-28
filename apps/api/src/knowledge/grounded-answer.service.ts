@@ -13,8 +13,8 @@ export const GENERATION_CONFIG = 'GENERATION_CONFIG';
 const insufficientAnswer = 'I couldn’t find enough information in this workspace’s knowledge base to answer that.';
 const contextCharacterLimit = 12000;
 export type GroundedSource = { id: string; number: number; documentId: string; documentName: string; chunkIndex: number; contentPreview: string; similarityScore: number; cited: boolean; chunkId: string };
-export type PreparedGroundedAnswer = { question: string; selected: Awaited<ReturnType<SemanticSearchService['search']>>['results']; sources: GroundedSource[]; context: string; instructions: string; maximumOutputTokens: number; model: string; temperature: number; insufficient: boolean };
-export type AgentGenerationOptions = { instructions?: string; fallbackMessage?: string | null; model?: string; temperature?: number; maxOutputTokens?: number };
+export type PreparedGroundedAnswer = { question: string; selected: Awaited<ReturnType<SemanticSearchService['search']>>['results']; sources: GroundedSource[]; context: string; instructions: string; maximumOutputTokens: number; model: string; temperature: number; topP: number; requireCitations: boolean; insufficient: boolean };
+export type AgentGenerationOptions = { instructions?: string; fallbackMessage?: string | null; model?: string; temperature?: number; topP?: number; maxOutputTokens?: number; documentIds?: string[]; requireCitations?: boolean; groundedOnly?: boolean; allowGeneralKnowledge?: boolean };
 @Injectable()
 export class EnvironmentTextGenerationProvider implements TextGenerationProvider {
   readonly provider = 'openai';
@@ -46,7 +46,8 @@ export class GroundedAnswerService {
       console.info(JSON.stringify({ event: 'knowledge.answer', requestId: randomUUID(), workspaceId, userId, retrievedSourceCount: 0, model: null, latencyMs: Date.now() - startedAt, success: true, category: 'insufficient_context' }));
       return { answer: insufficientAnswer, sources: [], provider: null, model: null, usage: { inputTokens: 0, outputTokens: 0 } };
     }
-    const generated = await this.generate({ question: prepared.question, context: prepared.context, instructions: prepared.instructions, maximumOutputTokens: prepared.maximumOutputTokens, model: prepared.model, temperature: prepared.temperature });
+    const generated = await this.generate({ question: prepared.question, context: prepared.context, instructions: prepared.instructions, maximumOutputTokens: prepared.maximumOutputTokens, model: prepared.model, temperature: prepared.temperature, topP: prepared.topP });
+    if (prepared.requireCitations && generated.citedSourceNumbers.length === 0) return { answer: insufficientAnswer, sources: [], provider: null, model: null, usage: generated.usage };
     const sources = this.sourcesFor(prepared, generated.citedSourceNumbers);
     const requestId = randomUUID();
     console.info(JSON.stringify({ event: 'knowledge.answer', requestId, workspaceId, userId, retrievedSourceCount: prepared.selected.length, model: generated.model, latencyMs: Date.now() - startedAt, inputTokens: generated.usage.inputTokens, outputTokens: generated.usage.outputTokens, success: true, category: 'generated' }));
@@ -70,19 +71,22 @@ export class GroundedAnswerService {
     if (now - (this.lastRequestAt.get(requestKey) ?? 0) < 2000) throw new HttpException('Please wait before asking another question', HttpStatus.TOO_MANY_REQUESTS);
     this.lastRequestAt.set(requestKey, now);
     const env = this.config;
-    const retrieval = publicAccess ? await this.semanticSearch.searchPublic(workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE }) : await this.semanticSearch.search(userId as string, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds });
+    const scopedDocumentIds = agent?.documentIds?.length ? agent.documentIds : documentIds;
+    const retrieval = publicAccess ? await this.semanticSearch.searchPublic(workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds: scopedDocumentIds }) : await this.semanticSearch.search(userId as string, workspaceId, { query: question, limit: env.AI_RETRIEVAL_LIMIT, minimumScore: env.AI_MINIMUM_SCORE, documentIds: scopedDocumentIds });
     const selected = [] as typeof retrieval.results;
     let contextLength = 0;
     for (const result of retrieval.results) { const normalized = normalizeForDeduplication(result.content); if (selected.some((candidate) => normalized === normalizeForDeduplication(candidate.content) || heavilyOverlaps(normalized, normalizeForDeduplication(candidate.content)))) continue; if (contextLength + result.content.length > contextCharacterLimit) break; selected.push(result); contextLength += result.content.length; }
     const model = agent?.model ?? env.OPENAI_GENERATION_MODEL;
     const temperature = agent?.temperature ?? 0.2;
+    const topP = agent?.topP ?? 1;
     const maximumOutputTokens = agent?.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS;
     const instructions = composeAgentInstructions(agent?.instructions);
     console.info(JSON.stringify({ event: 'knowledge.grounded_context_retrieved', workspaceId, userId: userId ?? null, retrievedResultCount: retrieval.results.length, selectedSourceCount: selected.length, contextCharacterCount: contextLength, minimumScore: env.AI_MINIMUM_SCORE, publicAccess }));
-    if (selected.length === 0) return { question, selected, sources: [], context: '', instructions, maximumOutputTokens, model, temperature, insufficient: true };
+    const requireCitations = agent?.requireCitations ?? true;
+    if (selected.length === 0) return { question, selected, sources: [], context: '', instructions, maximumOutputTokens, model, temperature, topP, requireCitations, insufficient: true };
     const promptSources = selected.map((result, index) => ({ number: index + 1, documentName: result.document.name, chunkIndex: result.chunkIndex, content: result.content }));
     console.info(JSON.stringify({ event: 'knowledge.grounded_prompt_constructed', workspaceId, userId: userId ?? null, sourceCount: promptSources.length, contextCharacterCount: contextLength, model, maximumOutputTokens, publicAccess }));
-    return { question, selected, sources: [], context: buildGroundedContext(promptSources), instructions, maximumOutputTokens, model, temperature, insufficient: false };
+    return { question, selected, sources: [], context: buildGroundedContext(promptSources), instructions, maximumOutputTokens, model, temperature, topP, requireCitations, insufficient: false };
   }
 
   sourcesFor(prepared: PreparedGroundedAnswer, citedSourceNumbers: readonly number[]): GroundedSource[] {

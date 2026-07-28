@@ -11,5 +11,6 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { AgentsModule } from './agents/agents.module';
 import { WidgetModule } from './widget/widget.module';
-@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule, WidgetModule] })
+import { InboxModule } from './inbox/inbox.module';
+@Module({ imports: [DatabaseModule, HealthModule, AuthModule, UsersModule, OrganizationsModule, WorkspacesModule, OnboardingModule, WorkspaceAccessModule, KnowledgeModule, AgentsModule, ConversationsModule, WidgetModule, InboxModule] })
 export class AppModule {}

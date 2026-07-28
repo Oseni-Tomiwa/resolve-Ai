@@ -33,6 +33,16 @@ describe('GroundedAnswerService', () => {
     expect(provider.generateGroundedAnswer).not.toHaveBeenCalled();
   });
 
+  it('passes an agent document selection to workspace-scoped retrieval', async () => {
+    // Arrange
+    const semanticSearch = { search: jest.fn().mockResolvedValue(retrieval) };
+    const service = new GroundedAnswerService(semanticSearch as never, new DeterministicTextGenerationProvider(), config);
+    // Act
+    await service.prepare('user-1', 'workspace-1', 'What is the refund policy?', ['doc-ignored-by-agent'], { documentIds: ['doc-1'] });
+    // Assert
+    expect(semanticSearch.search).toHaveBeenCalledWith('user-1', 'workspace-1', expect.objectContaining({ query: 'What is the refund policy?', documentIds: ['doc-1'] }));
+  });
+
   it('rejects empty questions and filters citations to supplied sources', async () => {
     // Arrange
     const semanticSearch = { search: jest.fn().mockResolvedValue(retrieval) };

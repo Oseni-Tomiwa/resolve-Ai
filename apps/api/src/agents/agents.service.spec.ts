@@ -12,7 +12,7 @@ function setup() {
     aIAgent: { findFirst: jest.fn().mockResolvedValue(agent), create: jest.fn().mockResolvedValue(agent), count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([agent]), updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue(agent) },
     $transaction: jest.fn(async (action: unknown) => typeof action === 'function' ? (action as (client: typeof db) => Promise<unknown>)(db) : Promise.all(action as Promise<unknown>[])),
   };
-  return { db, service: new AgentsService(db as unknown as PrismaClient) };
+  return { db, service: new AgentsService(db as unknown as PrismaClient, { prepare: jest.fn(), completePrepared: jest.fn() } as never) };
 }
 
 describe('AgentsService', () => {
