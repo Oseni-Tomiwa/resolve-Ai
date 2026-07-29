@@ -57,7 +57,12 @@ export async function apiFetch(path: string, init?: RequestInit, options: Reques
 
 export async function apiRequest<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
   const response = await apiFetch(path, init, options);
-  const body = await response.json() as { success: boolean; message?: string; data?: T };
+  let body: { success: boolean; message?: string; data?: T };
+  try {
+    body = await response.json() as { success: boolean; message?: string; data?: T };
+  } catch {
+    throw new Error(response.ok ? 'The API returned an invalid response.' : `The request failed with status ${response.status}.`);
+  }
   if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'The request could not be completed.');
   return body.data;
 }

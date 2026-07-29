@@ -8,10 +8,11 @@ function makeService() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       update: jest.fn().mockResolvedValue(conversation),
       findFirst: jest.fn().mockResolvedValue(conversation),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     widgetMessage: { create: jest.fn().mockResolvedValue({ id: 'message-1' }), findFirst: jest.fn().mockResolvedValue(null) },
     widgetConversationNote: { create: jest.fn().mockResolvedValue({ id: 'note-1', content: 'Private note' }) },
-    widgetConversationRead: { upsert: jest.fn() },
+    widgetConversationRead: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(async (callback: (tx: typeof db) => unknown) => callback(db)),
   };
   const access = { getAccess: jest.fn().mockResolvedValue({ organizationRole: 'MEMBER', workspaceRole: 'AGENT' }) };
@@ -19,6 +20,33 @@ function makeService() {
 }
 
 describe('InboxService', () => {
+  it('returns an empty workspace-scoped inbox without treating it as missing', async () => {
+    // Arrange
+    const { service, db, access } = makeService();
+    db.widgetConversation.findMany = jest.fn().mockResolvedValue([]);
+    db.widgetConversationRead.findMany.mockResolvedValue([]);
+    access.getAccess.mockResolvedValue({ organizationRole: 'OWNER', workspaceRole: '' });
+
+    // Act
+    const result = await service.list('owner-1', 'workspace-1', {});
+
+    // Assert
+    expect(result).toEqual({ items: [], unreadCount: 0, canManage: true });
+    expect(db.widgetConversation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { workspaceId: 'workspace-1' } }));
+  });
+
+  it('denies an inbox list when workspace access is rejected', async () => {
+    // Arrange
+    const { service, access } = makeService();
+    access.getAccess.mockRejectedValue(new Error('Workspace membership required'));
+
+    // Act
+    const action = service.list('outsider-1', 'workspace-1', {});
+
+    // Assert
+    await expect(action).rejects.toThrow('Workspace membership required');
+  });
+
   it('takes an AI conversation over atomically and assigns it to the teammate', async () => {
     const { service, db } = makeService();
     db.widgetConversation.findFirst.mockResolvedValue({ id: 'conversation-1', workspaceId: 'workspace-1', status: 'OPEN', mode: 'HUMAN', priority: 'NORMAL', source: 'WIDGET', visitorPageUrl: null, visitorReferrer: null, messages: [], notes: [], assignedUser: null, agentNameSnapshot: 'Agent', createdAt: new Date(), lastMessageAt: new Date(), resolvedAt: null });
