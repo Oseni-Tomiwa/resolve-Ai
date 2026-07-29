@@ -8,7 +8,13 @@ import type { UpdateWidgetConfigurationDto, WidgetConversationDto, WidgetMessage
 
 const sessionLifetimeMs = 24 * 60 * 60 * 1000;
 const maxMessagesPerSession = 100;
-const normalizeDomain = (value: string): string => value.trim().replace(/\/$/, '').toLowerCase();
+const normalizeOrigin = (value: string): string | null => {
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
+    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+  } catch { return null; }
+};
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
 const preview = (value: string): string => value.replace(/\s+/g, ' ').trim().slice(0, 240);
 const agentDocumentSelection = { knowledgeDocuments: { select: { knowledgeDocumentId: true } } } as const;
@@ -30,7 +36,8 @@ export class WidgetService {
     if (!organization || (!member && !['OWNER', 'ADMIN'].includes(organization.role)) || (!['OWNER', 'ADMIN'].includes(organization.role) && member?.role !== 'ADMIN')) throw new ForbiddenException('Only workspace owners and admins can manage the widget');
   }
 
-  private safeConfig(config: { publicId: string; enabled: boolean; name: string; greeting: string; accentColor: string; position: string; launcherLabel: string; allowedDomains: string[]; selectedAgent: { name: string; description: string | null; greeting: string | null } }) {
+  private publicError(status: HttpStatus, code: string, message: string): never { const response = { statusCode: status, code, message }; if (status === HttpStatus.FORBIDDEN) throw new ForbiddenException(response); if (status === HttpStatus.NOT_FOUND) throw new NotFoundException(response); if (status === HttpStatus.UNAUTHORIZED) throw new UnauthorizedException(response); throw new HttpException(response, status); }
+  private safeConfig(config: { publicId: string; enabled: boolean; name: string; greeting: string; accentColor: string; position: string; launcherLabel: string; selectedAgent: { name: string; description: string | null; greeting: string | null } }) {
     return { publicId: config.publicId, enabled: config.enabled, name: config.name, greeting: config.greeting, accentColor: config.accentColor, position: config.position, launcherLabel: config.launcherLabel, agent: { name: config.selectedAgent.name, description: config.selectedAgent.description, greeting: config.selectedAgent.greeting } };
   }
 
@@ -49,8 +56,10 @@ export class WidgetService {
     if (!selectedAgentId) throw new BadRequestException('Select an active agent before configuring the widget');
     const selectedAgent = await this.db.aIAgent.findFirst({ where: { id: selectedAgentId, workspaceId, status: 'ACTIVE', deletedAt: null }, select: { id: true } });
     if (!selectedAgent) throw new BadRequestException('The selected agent must be active and belong to this workspace');
-    const allowedDomains = dto.allowedDomains?.map(normalizeDomain).filter(Boolean) ?? undefined;
-    const configuration = await this.db.widgetConfiguration.upsert({ where: { workspaceId }, create: { workspaceId, selectedAgentId, ...(dto as object), ...(allowedDomains ? { allowedDomains } : {}) }, update: { ...dto, ...(allowedDomains ? { allowedDomains } : {}), selectedAgentId } as never, include: { selectedAgent: { select: { name: true, description: true, greeting: true } } } });
+    const allowedDomains = dto.allowedDomains?.map(normalizeOrigin);
+    if (allowedDomains?.some((domain): domain is null => domain === null)) throw new BadRequestException('Allowed domains must be exact origins such as https://support.example.com');
+    const normalizedDomains = allowedDomains?.filter((domain): domain is string => domain !== null);
+    const configuration = await this.db.widgetConfiguration.upsert({ where: { workspaceId }, create: { workspaceId, selectedAgentId, ...(dto as object), ...(normalizedDomains ? { allowedDomains: normalizedDomains } : {}) }, update: { ...dto, ...(normalizedDomains ? { allowedDomains: normalizedDomains } : {}), selectedAgentId } as never, include: { selectedAgent: { select: { name: true, description: true, greeting: true } } } });
     return { ...this.safeConfig(configuration), id: configuration.id, workspaceId, selectedAgentId: configuration.selectedAgentId, allowedDomains: configuration.allowedDomains };
   }
 
@@ -62,21 +71,21 @@ export class WidgetService {
 
   private origin(request: OriginRequest): string | undefined { const value = request.headers?.origin; return Array.isArray(value) ? value[0] : value; }
   private clientKey(request: OriginRequest): string { const value = request.headers?.['x-forwarded-for']; return Array.isArray(value) ? value[0] ?? 'unknown' : value?.split(',')[0]?.trim() ?? 'unknown'; }
-  private assertRateLimit(key: string, max: number, windowMs: number): void { const now = Date.now(); const recent = (this.rateLimits.get(key) ?? []).filter((timestamp) => now - timestamp < windowMs); if (recent.length >= max) throw new HttpException('Please try again shortly', HttpStatus.TOO_MANY_REQUESTS); recent.push(now); this.rateLimits.set(key, recent); }
+  private assertRateLimit(key: string, max: number, windowMs: number): void { const now = Date.now(); const recent = (this.rateLimits.get(key) ?? []).filter((timestamp) => now - timestamp < windowMs); if (recent.length >= max) this.publicError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', 'Please try again shortly.'); recent.push(now); this.rateLimits.set(key, recent); }
 
   private assertOrigin(config: { allowedDomains: string[] }, origin: string | undefined): void {
-    if (!origin) return;
-    const normalized = normalizeDomain(origin);
-    if (config.allowedDomains.length === 0 && process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return;
-    if (config.allowedDomains.length === 0 && process.env.NODE_ENV !== 'production') return;
-    if (!config.allowedDomains.some((domain) => normalized === domain || normalized === `https://${domain}` || normalized === `http://${domain}`)) throw new ForbiddenException('This website is not authorized to use the widget');
+    const normalized = origin ? normalizeOrigin(origin) : null;
+    const developmentOrigin = normalized && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized);
+    if (!normalized && process.env.NODE_ENV === 'production') this.publicError(HttpStatus.FORBIDDEN, 'WIDGET_ORIGIN_NOT_ALLOWED', 'This website is not authorized to use this support widget.');
+    if (process.env.NODE_ENV !== 'production' && developmentOrigin && config.allowedDomains.length === 0) return;
+    if (!normalized || !config.allowedDomains.some((domain) => normalizeOrigin(domain) === normalized)) this.publicError(HttpStatus.FORBIDDEN, 'WIDGET_ORIGIN_NOT_ALLOWED', 'This website is not authorized to use this support widget.');
   }
 
   private async publicConfiguration(publicId: string, request: OriginRequest, requireEnabled = true) {
     const configuration = await this.db.widgetConfiguration.findUnique({ where: { publicId }, include: { selectedAgent: { select: { id: true, name: true, description: true, greeting: true, instructions: true, fallbackMessage: true, model: true, temperature: true, topP: true, maxOutputTokens: true, requireCitations: true, groundedOnly: true, allowFollowUpQuestions: true, allowGeneralKnowledge: true, status: true, deletedAt: true, ...agentDocumentSelection } } } });
-    if (!configuration || configuration.selectedAgent.status !== 'ACTIVE' || configuration.selectedAgent.deletedAt) throw new NotFoundException('Widget not found');
+    if (!configuration || configuration.selectedAgent.status !== 'ACTIVE' || configuration.selectedAgent.deletedAt) this.publicError(HttpStatus.NOT_FOUND, 'WIDGET_NOT_FOUND', 'This support widget is unavailable.');
     this.assertOrigin(configuration, this.origin(request));
-    if (requireEnabled && !configuration.enabled) throw new ForbiddenException('This widget is currently disabled');
+    if (requireEnabled && !configuration.enabled) this.publicError(HttpStatus.FORBIDDEN, 'WIDGET_DISABLED', 'This support widget is currently unavailable.');
     this.assertRateLimit(`${publicId}:${this.clientKey(request)}`, 60, 60_000);
     return configuration;
   }
@@ -94,9 +103,10 @@ export class WidgetService {
 
   private async session(publicId: string, token: string, request: OriginRequest) {
     const configuration = await this.publicConfiguration(publicId, request);
-    const session = await this.db.widgetSession.findFirst({ where: { tokenHash: hash(token), widgetConfigurationId: configuration.id, expiresAt: { gt: new Date() } } });
-    if (!session) throw new UnauthorizedException('Widget session expired');
-    if (session.messageCount >= maxMessagesPerSession) throw new HttpException('This visitor session has reached its message limit', HttpStatus.TOO_MANY_REQUESTS);
+    const session = await this.db.widgetSession.findFirst({ where: { tokenHash: hash(token), widgetConfigurationId: configuration.id } });
+    if (!session) this.publicError(HttpStatus.UNAUTHORIZED, 'WIDGET_SESSION_INVALID', 'This support session is no longer valid.');
+    if (session.expiresAt <= new Date()) this.publicError(HttpStatus.UNAUTHORIZED, 'WIDGET_SESSION_EXPIRED', 'This support session has expired.');
+    if (session.messageCount >= maxMessagesPerSession) this.publicError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', 'This visitor session has reached its message limit.');
     return { configuration, session };
   }
 
@@ -104,6 +114,16 @@ export class WidgetService {
     const { configuration, session } = await this.session(publicId, dto.sessionId, request);
     const conversation = await this.db.widgetConversation.create({ data: { widgetConfigurationId: configuration.id, workspaceId: configuration.workspaceId, sessionId: session.id, agentId: configuration.selectedAgent.id, agentNameSnapshot: configuration.selectedAgent.name, title: dto.title.trim() || 'New visitor conversation', visitorPageUrl: session.pageUrl, visitorReferrer: session.referrer } });
     return { id: conversation.id, greeting: configuration.selectedAgent.greeting ?? configuration.greeting, agent: { name: configuration.selectedAgent.name } };
+  }
+
+  async requestHuman(publicId: string, conversationId: string, sessionId: string, request: OriginRequest) {
+    const { configuration, session } = await this.session(publicId, sessionId, request);
+    const conversation = await this.db.widgetConversation.findFirst({ where: { id: conversationId, sessionId: session.id, widgetConfigurationId: configuration.id } });
+    if (!conversation) this.publicError(HttpStatus.NOT_FOUND, 'WIDGET_SESSION_INVALID', 'This support session is no longer valid.');
+    if (conversation.mode === 'HUMAN') return { mode: 'HUMAN', status: conversation.status };
+    await this.db.widgetConversation.update({ where: { id_workspaceId: { id: conversationId, workspaceId: configuration.workspaceId } }, data: { mode: 'HUMAN', status: 'OPEN', lastMessageAt: new Date() } });
+    await this.db.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'SYSTEM', content: 'A visitor requested a support teammate.', status: 'COMPLETE' } });
+    return { mode: 'HUMAN', status: 'OPEN' };
   }
 
   async listMessages(publicId: string, conversationId: string, sessionId: string, request: OriginRequest) {
@@ -121,8 +141,10 @@ export class WidgetService {
     const conversation = await this.db.widgetConversation.findFirst({ where: { id: conversationId, sessionId: session.id, widgetConfigurationId: configuration.id }, include: { agent: { include: agentDocumentSelection } } });
     if (!conversation) throw new NotFoundException('Conversation not found');
     if (conversation.status === 'RESOLVED') { yield { type: 'conversation.resolved', message: 'This conversation has been resolved. Please start a new conversation if you need more help.' }; return; }
+    const existing = dto.clientMessageId ? await this.db.widgetMessage.findFirst({ where: { conversationId, workspaceId: configuration.workspaceId, clientMessageId: dto.clientMessageId } }) : null;
+    if (existing) return;
     const created = await this.db.$transaction(async (tx) => {
-      const user = await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'USER', content, status: 'COMPLETE' } });
+      const user = await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'USER', content, status: 'COMPLETE', clientMessageId: dto.clientMessageId } });
       await tx.widgetConversation.update({ where: { id_workspaceId: { id: conversationId, workspaceId: configuration.workspaceId } }, data: { lastMessageAt: new Date() } });
       const assistant = conversation.mode === 'AI' ? await tx.widgetMessage.create({ data: { conversationId, workspaceId: configuration.workspaceId, role: 'ASSISTANT', content: '', status: 'PENDING' } }) : null;
       await tx.widgetSession.update({ where: { id: session.id }, data: { messageCount: { increment: 1 }, lastSeenAt: new Date() } });

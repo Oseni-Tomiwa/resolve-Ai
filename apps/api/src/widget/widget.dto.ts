@@ -25,4 +25,5 @@ export class WidgetConversationDto {
 export class WidgetMessageDto {
   @IsString() @MinLength(20) @MaxLength(200) sessionId = '';
   @IsString() @MinLength(1) @MaxLength(4000) content = '';
+  @IsOptional() @IsString() @MaxLength(120) clientMessageId?: string;
 }
