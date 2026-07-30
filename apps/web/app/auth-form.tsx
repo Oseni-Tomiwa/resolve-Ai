@@ -36,7 +36,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault(); setError(''); setFieldError(''); if (!validate()) return; setIsSubmitting(true);
     try {
-      if (isRegister) await register({ firstName: values.firstName.trim(), lastName: values.lastName.trim(), email: values.email.trim(), password: values.password }); else await login({ email: values.email.trim(), password: values.password });
+      if (isRegister) { const result = await register({ firstName: values.firstName.trim(), lastName: values.lastName.trim(), email: values.email.trim(), password: values.password }); const invitationQuery = typeof window === 'undefined' ? '' : new URLSearchParams(window.location.search).get('invitation'); router.push(`/verify-email?email=${encodeURIComponent(values.email.trim())}${result.verificationUrl ? `&preview=${encodeURIComponent(result.verificationUrl)}` : ''}${invitationQuery ? `&invitation=${encodeURIComponent(invitationQuery)}` : ''}`); return; } else await login({ email: values.email.trim(), password: values.password.trim() });
       const invitationToken = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('invitation');
       if (invitationToken) await apiRequest<null>('/workspace-invitations/accept', { method: 'POST', body: JSON.stringify({ token: invitationToken }) });
       router.push(invitationToken ? '/dashboard' : (isRegister || onboarding?.required ? '/onboarding' : '/dashboard'));

@@ -6,12 +6,13 @@ import { apiFetch, registerSessionFailureHandler } from './api-client';
 export type AuthUser = { id: string; firstName: string; lastName: string; email: string; emailVerifiedAt: string | null; createdAt: string; updatedAt: string };
 export type WorkspaceSummary = { id: string; organizationId: string; name: string; slug: string; createdAt?: string; updatedAt?: string; members?: Array<{ role: string }> };
 export type OrganizationSummary = { id: string; name: string; slug: string; createdAt?: string; updatedAt?: string; workspaces?: WorkspaceSummary[]; members?: Array<{ role: string }> };
-export type OnboardingState = { required: boolean; organizations: OrganizationSummary[]; currentOrganization: OrganizationSummary | null; currentWorkspace: WorkspaceSummary | null };
+export type OnboardingState = { required: boolean; mode?: 'OWNER' | 'TEAMMATE'; organizations: OrganizationSummary[]; currentOrganization: OrganizationSummary | null; currentWorkspace: WorkspaceSummary | null };
 type Credentials = { email: string; password: string };
 type Registration = Credentials & { firstName: string; lastName: string };
 export type OnboardingInput = { organizationName: string; organizationSlug: string; workspaceName: string; workspaceSlug: string; industry: string; teamSize: string };
-type ApiResponse = { success: boolean; message?: string; data?: { user?: AuthUser; onboarding?: OnboardingState; organization?: OnboardingState['currentOrganization']; workspace?: OnboardingState['currentWorkspace'] } };
-type AuthContextValue = { user: AuthUser | null; onboarding: OnboardingState | null; loading: boolean; authenticated: boolean; sessionExpired: boolean; login: (credentials: Credentials) => Promise<void>; register: (details: Registration) => Promise<void>; createOnboarding: (input: OnboardingInput) => Promise<void>; logout: () => Promise<void>; clearSession: () => void; refreshSession: () => Promise<AuthUser | null> };
+type ApiResponse = { success: boolean; message?: string; data?: { user?: AuthUser; onboarding?: OnboardingState; verificationRequired?: boolean; verificationUrl?: string; organization?: OnboardingState['currentOrganization']; workspace?: OnboardingState['currentWorkspace'] } };
+type RegistrationResult = { verificationRequired: boolean; verificationUrl?: string };
+type AuthContextValue = { user: AuthUser | null; onboarding: OnboardingState | null; loading: boolean; authenticated: boolean; sessionExpired: boolean; login: (credentials: Credentials) => Promise<void>; register: (details: Registration) => Promise<RegistrationResult>; createOnboarding: (input: OnboardingInput) => Promise<void>; logout: () => Promise<void>; clearSession: () => void; refreshSession: () => Promise<AuthUser | null> };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 export const clearClientSession = (): void => {
@@ -73,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     user, onboarding, loading, authenticated: user !== null, sessionExpired, refreshSession, clearSession: expireSession,
     login: async (credentials) => { await request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }); await refreshSession(); },
-    register: async (details) => { await request('/auth/register', { method: 'POST', body: JSON.stringify(details) }); await refreshSession(); },
+    register: async (details) => { const result = await request('/auth/register', { method: 'POST', body: JSON.stringify(details) }); setUser(null); setOnboarding(null); return { verificationRequired: result.data?.verificationRequired ?? true, verificationUrl: result.data?.verificationUrl }; },
     createOnboarding: async (input) => { await request('/onboarding', { method: 'POST', body: JSON.stringify(input) }); await refreshSession(); },
     logout: async () => { try { await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) }); } finally { clearClientSession(); setUser(null); setOnboarding(null); setSessionExpired(false); } },
   }), [expireSession, loading, onboarding, refreshSession, sessionExpired, user]);

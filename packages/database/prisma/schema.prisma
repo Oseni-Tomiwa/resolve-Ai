@@ -125,6 +125,9 @@ model User {
   organizationMemberships OrganizationMember[]
   workspaceMemberships WorkspaceMember[]
   refreshTokens RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  onboardingProgress OnboardingProgress?
   sentWorkspaceInvitations WorkspaceInvitation[] @relation("InvitationInviter")
   uploadedKnowledgeDocuments KnowledgeDocument[] @relation("DocumentUploader")
   createdAIConversations AIConversation[] @relation("ConversationCreator")
@@ -135,6 +138,43 @@ model User {
   resolvedWidgetConversations WidgetConversation[] @relation("WidgetResolver")
   widgetConversationReads WidgetConversationRead[]
   widgetConversationNotes WidgetConversationNote[]
+}
+
+model EmailVerificationToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  tokenHash String @unique
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model OnboardingProgress {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @unique @db.Uuid
+  workspaceId String? @db.Uuid
+  currentStep String @default("WELCOME")
+  completedSteps String[] @default([])
+  skippedSteps String[] @default([])
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  lastUpdatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  @@index([workspaceId])
 }
 model Organization {
   id String @id @default(uuid()) @db.Uuid
@@ -187,6 +227,7 @@ model Workspace {
   widgetConversationNotes WidgetConversationNote[]
   aiMessageSources AIMessageSource[]
   subscription WorkspaceSubscription?
+  onboardingProgress OnboardingProgress[]
   @@unique([organizationId, slug])
   @@index([organizationId])
 }

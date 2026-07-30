@@ -1,5 +1,5 @@
 import { OrganizationIndustry, OrganizationTeamSize } from '@resolveai/database';
-import { IsEnum, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class OnboardingDto {
   @IsString() @MinLength(2) organizationName!: string;
@@ -8,4 +8,10 @@ export class OnboardingDto {
   @IsString() @MinLength(1) workspaceSlug!: string;
   @IsEnum(OrganizationIndustry) industry!: OrganizationIndustry;
   @IsEnum(OrganizationTeamSize) teamSize!: OrganizationTeamSize;
+}
+export class OnboardingProgressDto {
+  @IsOptional() @IsString() currentStep?: string;
+  @IsOptional() @IsString() completedStep?: string;
+  @IsOptional() @IsString() skippedStep?: string;
+  @IsOptional() @IsString() workspaceId?: string;
 }

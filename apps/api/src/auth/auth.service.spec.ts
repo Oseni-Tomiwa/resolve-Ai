@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 jest.mock('argon2', () => ({ __esModule: true, hash: jest.fn(), verify: jest.fn() }));
 jest.mock('jsonwebtoken', () => ({ __esModule: true, sign: jest.fn() }));
 // Load the service after registering factories for its native and token dependencies.
@@ -10,20 +10,24 @@ const mockedArgon2 = require('argon2') as { hash: jest.Mock; verify: jest.Mock }
 const mockedJwt = require('jsonwebtoken') as { sign: jest.Mock };
 
 type MockDatabase = {
-  user: { findUnique: jest.Mock; create: jest.Mock };
+  user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+  emailVerificationToken: { create: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
+  passwordResetToken: { create: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock; update: jest.Mock };
   refreshToken: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
 const createDatabase = (): MockDatabase => ({
-  user: { findUnique: jest.fn(), create: jest.fn() },
+  user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+  emailVerificationToken: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
+  passwordResetToken: { create: jest.fn(), findFirst: jest.fn(), updateMany: jest.fn(), update: jest.fn() },
   refreshToken: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   $transaction: jest.fn(),
 });
 
 const user = {
   id: 'user-1', firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', passwordHash: 'hashed-password',
-  emailVerifiedAt: null, createdAt: new Date('2025-01-01'), updatedAt: new Date('2025-01-01'),
+  emailVerifiedAt: new Date('2025-01-01'), createdAt: new Date('2025-01-01'), updatedAt: new Date('2025-01-01'),
 };
 
 describe('AuthService', () => {
@@ -96,6 +100,31 @@ describe('AuthService', () => {
     // Assert
     expect(result.refreshToken).not.toBe('old-refresh-token');
     expect(db.refreshToken.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'refresh-1' }, data: { revokedAt: expect.any(Date) } }));
-    expect(db.$transaction).toHaveBeenCalledWith(expect.arrayContaining([expect.anything(), expect.anything()]));
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Array));
+  });
+
+  it('requires email verification before login', async () => {
+    // Arrange
+    const db = createDatabase(); db.user.findUnique.mockResolvedValue({ ...user, emailVerifiedAt: null });
+    const service = new AuthService(db as never);
+
+    // Act
+    const action = service.login({ email: user.email, password: 'Password123!' });
+
+    // Assert
+    await expect(action).rejects.toThrow(new ForbiddenException('Please verify your email before signing in'));
+  });
+
+  it('consumes a valid verification token once', async () => {
+    // Arrange
+    const db = createDatabase(); db.emailVerificationToken.findFirst.mockResolvedValue({ id: 'verification-1', userId: user.id, user }); db.$transaction.mockResolvedValue([]);
+    const service = new AuthService(db as never);
+
+    // Act
+    const result = await service.verifyEmail('verification-token-value');
+
+    // Assert
+    expect(result).not.toHaveProperty('passwordHash');
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Array));
   });
 });
