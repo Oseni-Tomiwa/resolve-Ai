@@ -1,0 +1,7 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+import { apiRequest } from '../api-client';
+
+export default function ForgotPasswordPage() { const [email, setEmail] = useState(''); const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); async function submit(): Promise<void> { setBusy(true); setError(''); try { await apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }); setMessage('If an account exists, password reset instructions have been sent.'); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to send reset instructions.'); } finally { setBusy(false); } } return <div className="auth-layout"><main className="auth-card"><p className="eyebrow">Account recovery</p><h1>Reset your password</h1><p>Enter your email and we’ll send a secure, expiring reset link.</p><label>Email address<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" /></label>{error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-notice" role="status">{message}</p>}<button className="button auth-submit" type="button" disabled={busy || !email} onClick={() => void submit()}>{busy ? 'Sending…' : 'Send reset link'}</button><p className="auth-switch"><Link href="/login">Back to sign in</Link></p></main></div>; }
