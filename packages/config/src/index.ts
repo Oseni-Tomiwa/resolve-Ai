@@ -40,7 +40,7 @@ export const envSchema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  BILLING_PROVIDER: z.literal('stripe').default('stripe'),
+  BILLING_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_PRO: z.string().optional(),

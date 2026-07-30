@@ -33,7 +33,7 @@ describe('AI environment contract', () => {
     const env = validateRuntimeEnv({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://localhost/db', REDIS_URL: 'redis://localhost:6379', JWT_ACCESS_SECRET: 'a'.repeat(32), JWT_REFRESH_SECRET: 'b'.repeat(32) });
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.API_PORT).toBe(4000);
-    expect(env.BILLING_PROVIDER).toBe('stripe');
+    expect(env.BILLING_PROVIDER).toBe('mock');
   });
 
   it('rejects unsafe production configuration without exposing secret values', () => {
