@@ -16,6 +16,7 @@ export function registerSessionFailureHandler(handler: SessionFailureHandler): (
 function requestInit(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
   if (!(init?.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (!headers.has('X-Request-Id')) headers.set('X-Request-Id', globalThis.crypto?.randomUUID?.() ?? `web-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   return {
     ...init,
     credentials: 'include',

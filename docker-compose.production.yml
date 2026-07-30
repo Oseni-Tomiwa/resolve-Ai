@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - resolveai-postgres-production:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [resolveai]
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "5" } }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - resolveai-redis-production:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [resolveai]
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "5" } }
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: migration
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DIRECT_DATABASE_URL: ${DIRECT_DATABASE_URL:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [resolveai]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: ${PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    networks: [resolveai]
+    logging: { driver: json-file, options: { max-size: 20m, max-file: "5" } }
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file: ${PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      WORKER_PORT: 4100
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    networks: [resolveai]
+    logging: { driver: json-file, options: { max-size: 20m, max-file: "5" } }
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    restart: unless-stopped
+    env_file: ${PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [resolveai]
+    logging: { driver: json-file, options: { max-size: 20m, max-file: "5" } }
+
+networks:
+  resolveai:
+    driver: bridge
+
+volumes:
+  resolveai-postgres-production:
+  resolveai-redis-production:

@@ -280,7 +280,7 @@
     const setError = (message = '') => { error.textContent = message; error.hidden = !message; };
     const publicError = (code) => ({ WIDGET_DISABLED: 'This support chat is currently unavailable.', WIDGET_ORIGIN_NOT_ALLOWED: 'This support chat is not available on this website.', WIDGET_SESSION_INVALID: 'Your support session is no longer valid. Refresh to try again.', WIDGET_SESSION_EXPIRED: 'Your support session expired. Refresh to try again.', RATE_LIMITED: 'Please wait a moment before trying again.', AGENT_UNAVAILABLE: 'The support assistant is currently unavailable.', AI_PROVIDER_UNAVAILABLE: 'The support assistant is temporarily unavailable.' }[code] ?? 'The support chat is unavailable.');
     const request = async (path, init) => {
-        const response = await fetch(`${apiBase}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+        const response = await fetch(`${apiBase}${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'X-Request-Id': globalThis.crypto?.randomUUID?.() ?? `widget-${Date.now()}`, ...init?.headers } });
         let body;
         try {
             body = await response.json();
@@ -406,7 +406,7 @@
     } });
     composer.addEventListener('submit', async (event) => { event.preventDefault(); const content = input.value.trim(); if (!content || busy || !conversationId)
         return; busy = true; input.disabled = true; send.disabled = true; handoff.disabled = true; setError(); input.value = ''; const clientMessageId = `widget-${Date.now()}-${Math.random().toString(36).slice(2)}`; messages.push({ id: `temp-${clientMessageId}`, role: 'USER', content }, { id: `temp-${clientMessageId}-assistant`, role: 'ASSISTANT', content: '' }); render(); const assistant = messages[messages.length - 1]; const controller = new AbortController(); const timeout = window.setTimeout(() => controller.abort(), 45000); try {
-        const response = await fetch(`${apiBase}/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, content, clientMessageId }), signal: controller.signal });
+        const response = await fetch(`${apiBase}/public/widgets/${encodeURIComponent(widgetId)}/conversations/${conversationId}/messages/stream`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': globalThis.crypto?.randomUUID?.() ?? `widget-${Date.now()}` }, body: JSON.stringify({ sessionId, content, clientMessageId }), signal: controller.signal });
         if (!response.ok || !response.body)
             throw new Error(publicError('AI_PROVIDER_UNAVAILABLE'));
         const reader = response.body.getReader();

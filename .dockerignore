@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+dist
+build
+coverage
+storage
+.env
+.env.*
+!.env.example
+.git
+.github
+**/*.log
+**/tsconfig.tsbuildinfo

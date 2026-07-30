@@ -14,10 +14,12 @@ import { WidgetModule } from './widget/widget.module';
 import { InboxModule } from './inbox/inbox.module';
 import { BillingModule } from './billing/billing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    CommonModule,
     HealthModule,
     AuthModule,
     UsersModule,

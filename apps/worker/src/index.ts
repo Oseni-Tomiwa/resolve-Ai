@@ -1,17 +1,22 @@
+import { createServer } from 'node:http';
 import { Worker } from 'bullmq';
+import { Redis } from 'ioredis';
 import { prisma } from '@resolveai/database';
 import { LocalStorage } from '@resolveai/storage';
-import { loadEmbeddingEnv, loadRootEnv } from '@resolveai/config';
+import { loadEmbeddingEnv, loadRootEnv, validateRuntimeEnv } from '@resolveai/config';
 import { chunkText } from './chunking.js';
 import { createProductionEmbeddingProvider, embedDocumentChunks } from './embedding.js';
 import { extractText } from './processing.js';
 import { processingErrorCategory } from './error-category.js';
 
 loadRootEnv();
+const runtimeEnv = validateRuntimeEnv(process.env);
 
 const queueName = 'knowledge-processing';
-const connection = { url: process.env.REDIS_URL ?? 'redis://localhost:6379' };
-const storage = new LocalStorage(process.env.KNOWLEDGE_STORAGE_DIR);
+const connection = { url: runtimeEnv.REDIS_URL };
+const storage = new LocalStorage(runtimeEnv.KNOWLEDGE_STORAGE_DIR);
+
+const withTimeout = <T>(task: Promise<T>, timeoutMs: number): Promise<T> => new Promise<T>((resolve, reject) => { const timer = setTimeout(() => reject(new Error('WORKER_JOB_TIMEOUT')), timeoutMs); task.then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error); }); });
 
 async function processDocument(documentId: string, workspaceId: string): Promise<void> {
   const document = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, workspaceId, deletedAt: null } });
@@ -69,14 +74,29 @@ async function recoverInterruptedDocuments(): Promise<void> {
 
 const worker = new Worker(queueName, async (job) => {
   const { documentId, workspaceId } = job.data as { documentId: string; workspaceId: string };
-  await processDocument(documentId, workspaceId);
-}, { connection, concurrency: 2 });
+  await withTimeout(processDocument(documentId, workspaceId), runtimeEnv.WORKER_JOB_TIMEOUT_MS);
+}, { connection, concurrency: runtimeEnv.WORKER_CONCURRENCY });
+
+const readinessRedis = new Redis(runtimeEnv.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false });
+const healthServer = createServer(async (request, response) => {
+  response.setHeader('Content-Type', 'application/json');
+  if (request.url === '/health') { response.statusCode = 200; response.end(JSON.stringify({ success: true, data: { status: 'ok' } })); return; }
+  if (request.url !== '/ready') { response.statusCode = 404; response.end(JSON.stringify({ success: false, message: 'Not found' })); return; }
+  const [database, redis] = await Promise.all([
+    prisma.$queryRawUnsafe('SELECT 1').then(() => 'ok').catch(() => 'unavailable'),
+    (async () => { try { if (readinessRedis.status === 'wait') await readinessRedis.connect(); await readinessRedis.ping(); return 'ok'; } catch { return 'unavailable'; } })(),
+  ]);
+  const ready = worker.isRunning() && database === 'ok' && redis === 'ok';
+  response.statusCode = ready ? 200 : 503;
+  response.end(JSON.stringify({ success: ready, data: { status: ready ? 'ready' : 'degraded', worker: worker.isRunning() ? 'ok' : 'unavailable', database, redis } }));
+});
+healthServer.listen(runtimeEnv.WORKER_PORT, () => console.info(JSON.stringify({ event: 'knowledge.worker_health_ready', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, port: runtimeEnv.WORKER_PORT })));
 
 worker.on('failed', (job, error) => console.error(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, category: processingErrorCategory(error) })));
 worker.on('error', (error) => console.error(JSON.stringify({ event: 'knowledge.worker_error', category: processingErrorCategory(error) })));
 void recoverInterruptedDocuments().catch(() => console.error(JSON.stringify({ event: 'knowledge.recovery_failed', category: 'DATABASE_UNAVAILABLE' })));
 console.info(JSON.stringify({ event: 'knowledge.worker_ready', queue: queueName }));
 
-async function shutdown(signal: string): Promise<void> { console.info(JSON.stringify({ event: 'knowledge.worker_shutdown', signal })); await worker.close(); await prisma.$disconnect(); }
+async function shutdown(signal: string): Promise<void> { console.info(JSON.stringify({ event: 'knowledge.worker_shutdown', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, signal })); await new Promise<void>((resolve) => healthServer.close(() => resolve())); await worker.close(); await readinessRedis.quit().catch(() => undefined); await prisma.$disconnect(); }
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));

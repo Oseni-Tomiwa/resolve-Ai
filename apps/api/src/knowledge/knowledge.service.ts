@@ -12,7 +12,7 @@ import type { KnowledgeChunkQueryDto, KnowledgeListQueryDto } from './dto';
 import { BillingUsageService } from '../billing/billing-usage.service';
 
 const allowedMimeTypes = new Set(['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown']);
-const maxFileSize = 10 * 1024 * 1024;
+const maxFileSize = Number(process.env.KNOWLEDGE_MAX_FILE_SIZE_BYTES ?? 10 * 1024 * 1024);
 const safeName = (name: string): string => name.normalize('NFKC').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 160) || 'document';
 const publicDocument = (document: Record<string, unknown>) => { const { storageKey: _storageKey, extractedText: _extractedText, _count: _documentCount, ...metadata } = document; return metadata; };
 type Access = { organizationRole: string; workspaceRole: string; organizationId: string };
