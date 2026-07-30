@@ -2,7 +2,7 @@ import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
 
 export type UsageMetric = 'AI_REQUESTS' | 'TOKENS' | 'CONVERSATIONS' | 'DOCUMENTS' | 'STORAGE' | 'TEAM_MEMBERS';
-export type PlanName = 'FREE' | 'STARTER' | 'PRO' | 'ENTERPRISE';
+export type PlanName = 'FREE' | 'STARTER' | 'PRO' | 'BUSINESS' | 'ENTERPRISE';
 type LimitValue = number | null;
 type CountRow = { count: bigint };
 type TokenRow = { inputTokens: number | null; outputTokens: number | null };
@@ -13,6 +13,7 @@ export const planLimits: Record<PlanName, BillingLimits> = {
   FREE: { aiRequests: 100, tokens: 50_000, conversations: 100, documents: 10, storageBytes: 50 * 1024 * 1024, teamMembers: 3 },
   STARTER: { aiRequests: 2_000, tokens: 500_000, conversations: 2_000, documents: 100, storageBytes: 5 * 1024 * 1024 * 1024, teamMembers: 10 },
   PRO: { aiRequests: 10_000, tokens: 5_000_000, conversations: 10_000, documents: 1_000, storageBytes: 25 * 1024 * 1024 * 1024, teamMembers: 50 },
+  BUSINESS: { aiRequests: 50_000, tokens: 25_000_000, conversations: 50_000, documents: 5_000, storageBytes: 100 * 1024 * 1024 * 1024, teamMembers: 250 },
   ENTERPRISE: { aiRequests: null, tokens: null, conversations: null, documents: null, storageBytes: null, teamMembers: null },
 };
 
@@ -25,7 +26,7 @@ export class BillingUsageService {
   async ensureSubscription(workspaceId: string) {
     const start = periodStart();
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-    return this.db.workspaceSubscription.upsert({ where: { workspaceId }, update: {}, create: { workspaceId, currentPeriodStart: start, currentPeriodEnd: end, renewalDate: end } });
+    return this.db.workspaceSubscription.upsert({ where: { workspaceId }, update: { provider: 'stripe' }, create: { workspaceId, currentPeriodStart: start, currentPeriodEnd: end, renewalDate: end, provider: 'stripe' } });
   }
 
   async usage(workspaceId: string, since = periodStart()) {

@@ -1,4 +1,12 @@
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+export const apiBaseUrl = `${configuredApiUrl.replace(/\/$/, '').replace(/\/api\/v1$/, '')}/api/v1`;
+
+export class ApiNetworkError extends Error {
+  constructor() {
+    super(process.env.NODE_ENV === 'development' ? `Unable to reach the ResolveAI API at ${apiBaseUrl}. Confirm the API is running on localhost:4000.` : 'Unable to reach the authentication service. Please try again.');
+    this.name = 'ApiNetworkError';
+  }
+}
 
 type RequestOptions = { retryOnUnauthorized?: boolean };
 type SessionFailureHandler = () => void;
@@ -43,11 +51,21 @@ async function refreshAccess(): Promise<boolean> {
 }
 
 export async function apiFetch(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<Response> {
-  const response = await fetch(`${apiBaseUrl}${path}`, requestInit(init));
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, requestInit(init));
+  } catch {
+    throw new ApiNetworkError();
+  }
   if (response.status !== 401 || options.retryOnUnauthorized === false) return response;
 
   if (await refreshAccess()) {
-    const retried = await fetch(`${apiBaseUrl}${path}`, requestInit(init));
+    let retried: Response;
+    try {
+      retried = await fetch(`${apiBaseUrl}${path}`, requestInit(init));
+    } catch {
+      throw new ApiNetworkError();
+    }
     if (retried.status === 401) sessionFailureHandler?.();
     return retried;
   }

@@ -1,0 +1,1 @@
+ALTER TYPE "SubscriptionPlan" ADD VALUE 'BUSINESS';

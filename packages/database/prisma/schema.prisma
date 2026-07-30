@@ -23,6 +23,7 @@ enum SubscriptionPlan {
   FREE
   STARTER
   PRO
+  BUSINESS
   ENTERPRISE
 }
 

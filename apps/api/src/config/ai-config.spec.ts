@@ -33,6 +33,7 @@ describe('AI environment contract', () => {
     const env = validateRuntimeEnv({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://localhost/db', REDIS_URL: 'redis://localhost:6379', JWT_ACCESS_SECRET: 'a'.repeat(32), JWT_REFRESH_SECRET: 'b'.repeat(32) });
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(env.API_PORT).toBe(4000);
+    expect(env.BILLING_PROVIDER).toBe('stripe');
   });
 
   it('rejects unsafe production configuration without exposing secret values', () => {
@@ -40,7 +41,7 @@ describe('AI environment contract', () => {
   });
 
   it('accepts a complete production configuration', () => {
-    const env = validateRuntimeEnv({ NODE_ENV: 'production', DATABASE_URL: 'postgresql://db/app', REDIS_URL: 'redis://redis:6379', JWT_ACCESS_SECRET: 'a'.repeat(64), JWT_REFRESH_SECRET: 'b'.repeat(64), OPENAI_API_KEY: 'sk-test-only', WEB_URL: 'https://app.example.com', API_URL: 'https://api.example.com/api/v1', PUBLIC_API_URL: 'https://api.example.com/api/v1', NEXT_PUBLIC_API_URL: 'https://api.example.com/api/v1', WIDGET_SCRIPT_URL: 'https://app.example.com/widget.js', COOKIE_SECURE: 'true', CORS_ALLOWED_ORIGINS: 'https://app.example.com' });
+    const env = validateRuntimeEnv({ NODE_ENV: 'production', DATABASE_URL: 'postgresql://db/app', REDIS_URL: 'redis://redis:6379', JWT_ACCESS_SECRET: 'a'.repeat(64), JWT_REFRESH_SECRET: 'b'.repeat(64), OPENAI_API_KEY: 'sk-test-only', WEB_URL: 'https://app.example.com', API_URL: 'https://api.example.com/api/v1', PUBLIC_API_URL: 'https://api.example.com/api/v1', NEXT_PUBLIC_API_URL: 'https://api.example.com/api/v1', WIDGET_SCRIPT_URL: 'https://app.example.com/widget.js', COOKIE_SECURE: 'true', CORS_ALLOWED_ORIGINS: 'https://app.example.com', STRIPE_SECRET_KEY: 'sk_test_only', STRIPE_WEBHOOK_SECRET: 'whsec_test_only', STRIPE_PRICE_PRO: 'price_pro', STRIPE_PRICE_BUSINESS: 'price_business' });
     expect(env.NODE_ENV).toBe('production');
     expect(env.OPENAI_GENERATION_MODEL).toBe('gpt-4o-mini');
   });

@@ -17,7 +17,7 @@ export const envSchema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(20).default(2),
   WORKER_JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
   WEB_URL: z.string().url().default('http://localhost:3000'),
-  API_URL: z.string().url().default('http://localhost:4000/api/v1'),
+  API_URL: z.string().url().default('http://localhost:4000'),
   PUBLIC_API_URL: z.string().url().default('http://localhost:4000/api/v1'),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:4000/api/v1'),
   WIDGET_SCRIPT_URL: z.string().url().default('http://localhost:3000/widget.js'),
@@ -40,9 +40,15 @@ export const envSchema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
-  BILLING_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
+  BILLING_PROVIDER: z.literal('stripe').default('stripe'),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_PRO: z.string().optional(),
+  STRIPE_PRICE_BUSINESS: z.string().optional(),
+  STRIPE_SUCCESS_URL: z.string().url().optional(),
+  STRIPE_CANCEL_URL: z.string().url().optional(),
+  STRIPE_PORTAL_RETURN_URL: z.string().url().optional(),
+  STRIPE_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().positive().default(300),
   EMAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
   EMAIL_FROM_NAME: z.string().default('ResolveAI'),
   EMAIL_FROM_ADDRESS: z.string().email().default('no-reply@example.com'),
@@ -113,7 +119,11 @@ export const validateRuntimeEnv = (input: Record<string, string | undefined>): R
     } catch { errors.push('CORS_ALLOWED_ORIGINS contains an invalid origin'); }
   }
   if (env.STORAGE_PROVIDER === 's3' && (!env.S3_BUCKET || !env.S3_REGION || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)) errors.push('S3 storage requires bucket, region, access key, and secret key configuration');
-  if (env.BILLING_PROVIDER === 'stripe' && !env.STRIPE_SECRET_KEY) errors.push('Stripe billing requires STRIPE_SECRET_KEY');
+  if (env.BILLING_PROVIDER === 'stripe') {
+    if (!env.STRIPE_SECRET_KEY) errors.push('Stripe billing requires STRIPE_SECRET_KEY');
+    if (!env.STRIPE_WEBHOOK_SECRET) errors.push('Stripe billing requires STRIPE_WEBHOOK_SECRET');
+    if (!env.STRIPE_PRICE_PRO || !env.STRIPE_PRICE_BUSINESS) errors.push('Stripe billing requires STRIPE_PRICE_PRO and STRIPE_PRICE_BUSINESS');
+  }
   if (env.EMAIL_PROVIDER === 'smtp' && (!env.SMTP_HOST || !env.SMTP_PORT)) errors.push('SMTP email requires SMTP_HOST and SMTP_PORT');
   if (errors.length > 0) throw new Error(`Production environment validation failed: ${errors.join('; ')}`);
   return { ...env, ...ai };

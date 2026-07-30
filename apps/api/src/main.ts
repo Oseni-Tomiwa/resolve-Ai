@@ -10,11 +10,12 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { loadRootEnv, validateRuntimeEnv } from '@resolveai/config';
 import { AppModule } from './app.module';
 import { HttpErrorFilter } from './common/http-error.filter';
+import { corsAllowedHeaders, isAllowedCorsOrigin } from './common/cors';
 
 async function bootstrap(): Promise<void> {
   loadRootEnv();
   const env = validateRuntimeEnv(process.env);
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
   app.getHttpAdapter().getInstance().set('trust proxy', env.TRUST_PROXY);
   app.setGlobalPrefix('api/v1');
   app.useBodyParser('json', { limit: env.API_BODY_LIMIT });
@@ -37,12 +38,11 @@ async function bootstrap(): Promise<void> {
   app.use((request: Request, response: Response, next: NextFunction) => {
     const origin = request.headers.origin;
     const isPublicWidget = request.path.startsWith('/api/v1/public/widgets');
-    const allowedOrigins = new Set(env.CORS_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean));
-    if (origin && (isPublicWidget || allowedOrigins.has(origin))) {
+    if (origin && isAllowedCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS, isPublicWidget)) {
       response.setHeader('Access-Control-Allow-Origin', origin);
       response.setHeader('Access-Control-Allow-Credentials', 'true');
       response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      response.setHeader('Access-Control-Allow-Headers', corsAllowedHeaders);
       response.setHeader('Vary', 'Origin');
       if (request.method === 'OPTIONS') {
         response.status(204).end();

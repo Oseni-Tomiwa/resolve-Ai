@@ -40,7 +40,8 @@ Important values include:
 - `WEB_URL`, `PUBLIC_API_URL`, `NEXT_PUBLIC_API_URL`, and `WIDGET_SCRIPT_URL` must use the public HTTPS origins.
 - `CORS_ALLOWED_ORIGINS` is a comma-separated exact-origin list for the dashboard. Public widget requests still pass the widget’s exact allowed-domain check.
 - `DATABASE_URL` and `REDIS_URL` must be reachable from the container network.
-- `OPENAI_API_KEY` remains backend-only and is never prefixed with `NEXT_PUBLIC_`.
+- `OPENAI_API_KEY` and `STRIPE_SECRET_KEY` remain backend-only and are never prefixed with `NEXT_PUBLIC_`.
+- Stripe billing requires `BILLING_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and recurring price IDs for `STRIPE_PRICE_PRO` and `STRIPE_PRICE_BUSINESS`.
 - `STORAGE_PROVIDER=local` is for development or a single durable host. Use an S3-compatible private bucket before horizontally scaling API/worker replicas.
 
 ## Build and migration sequence
@@ -121,6 +122,6 @@ Rotate OpenAI, database, Redis, JWT, SMTP, and billing credentials through the s
 ## Current limitations
 
 - S3-compatible storage configuration is prepared but the provider implementation remains local-only.
-- Billing currently uses the existing mock provider unless the Stripe integration is completed separately.
+- Billing uses Stripe Checkout, Customer Portal, and signed webhooks when `BILLING_PROVIDER=stripe`. The mock provider is retained only as a test fixture and is never selected by the runtime module.
 - Worker readiness is an HTTP health server, not a separate orchestration control plane.
 - CI validates the Prisma schema and application checks; it does not perform live provider calls or deployment.
