@@ -35,6 +35,7 @@ export interface BillingProvider {
   changePlan(input: { workspaceId: string; plan: BillingPlan; currentProviderCustomerId?: string | null; currentProviderSubscriptionId?: string | null }): Promise<PlanChangeResult>;
   createCheckoutSession(input: { workspaceId: string; plan: BillingPlan; providerCustomerId?: string | null }): Promise<BillingCheckoutResult>;
   createPortalSession(input: { providerCustomerId: string }): Promise<BillingPortalResult>;
+  createCustomer?(workspaceId: string): Promise<string>;
   cancelSubscription?(input: { providerSubscriptionId: string }): Promise<PlanChangeResult>;
   verifyWebhook(rawBody: Buffer, signature: string): StripeWebhookEvent;
   subscriptionResult?(subscription: Record<string, unknown>, fallbackPlan?: BillingPlan, fallbackCustomerId?: string | null): PlanChangeResult;
@@ -150,7 +151,7 @@ export class StripeBillingProvider implements BillingProvider {
     return price;
   }
 
-  private async createCustomer(workspaceId: string): Promise<string> {
+  async createCustomer(workspaceId: string): Promise<string> {
     const customer = await this.request<Record<string, unknown>>('/customers', { 'metadata[workspaceId]': workspaceId }, `customer-${workspaceId}`);
     const id = asString(customer.id);
     if (!id) throw new ServiceUnavailableException('Stripe did not return a customer');
@@ -178,6 +179,7 @@ export class MockBillingProvider implements BillingProvider {
   async changePlan(input: { workspaceId: string; plan: BillingPlan; currentProviderCustomerId?: string | null; currentProviderSubscriptionId?: string | null }): Promise<PlanChangeResult> { return { provider: 'mock', providerCustomerId: input.currentProviderCustomerId, providerSubscriptionId: input.currentProviderSubscriptionId ?? `mock_sub_${input.workspaceId}`, plan: input.plan, status: 'ACTIVE' }; }
   async createCheckoutSession(): Promise<BillingCheckoutResult> { throw new ServiceUnavailableException('Mock billing does not support checkout'); }
   async createPortalSession(): Promise<BillingPortalResult> { throw new ServiceUnavailableException('Mock billing does not support the customer portal'); }
+  async createCustomer(workspaceId: string): Promise<string> { return `mock_customer_${workspaceId}`; }
   async cancelSubscription(): Promise<PlanChangeResult> { throw new ServiceUnavailableException('Mock billing does not support cancellation'); }
   verifyWebhook(): StripeWebhookEvent { throw new ServiceUnavailableException('Mock billing does not support webhooks'); }
   subscriptionResult(_subscription: Record<string, unknown>, fallbackPlan: BillingPlan = BillingPlanDto.FREE, fallbackCustomerId?: string | null): PlanChangeResult { return { provider: 'mock', plan: fallbackPlan, status: 'ACTIVE', providerCustomerId: fallbackCustomerId }; }

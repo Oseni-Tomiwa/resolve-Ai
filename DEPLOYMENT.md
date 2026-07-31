@@ -122,6 +122,6 @@ Rotate OpenAI, database, Redis, JWT, SMTP, and billing credentials through the s
 ## Current limitations
 
 - S3-compatible storage configuration is prepared but the provider implementation remains local-only.
-- Billing uses Stripe Checkout, Customer Portal, and signed webhooks when `BILLING_PROVIDER=stripe`. The mock provider is retained only as a test fixture and is never selected by the runtime module.
+- Billing uses Stripe Checkout, Customer Portal, and signed webhooks when `BILLING_PROVIDER=stripe`; local development defaults to the deterministic mock provider when `BILLING_PROVIDER=mock`.
 - Worker readiness is an HTTP health server, not a separate orchestration control plane.
 - CI validates the Prisma schema and application checks; it does not perform live provider calls or deployment.

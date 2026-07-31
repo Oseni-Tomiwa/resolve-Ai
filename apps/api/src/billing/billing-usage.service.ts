@@ -26,7 +26,8 @@ export class BillingUsageService {
   async ensureSubscription(workspaceId: string) {
     const start = periodStart();
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-    return this.db.workspaceSubscription.upsert({ where: { workspaceId }, update: { provider: 'stripe' }, create: { workspaceId, currentPeriodStart: start, currentPeriodEnd: end, renewalDate: end, provider: 'stripe' } });
+    const provider = process.env.BILLING_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'stripe' : 'mock');
+    return this.db.workspaceSubscription.upsert({ where: { workspaceId }, update: provider === 'mock' ? { provider: 'mock', providerCustomerId: null, providerSubscriptionId: null } : {}, create: { workspaceId, currentPeriodStart: start, currentPeriodEnd: end, renewalDate: end, provider } });
   }
 
   async usage(workspaceId: string, since = periodStart()) {

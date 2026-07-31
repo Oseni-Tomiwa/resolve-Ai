@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { WorkspaceAccessModule } from '../workspace-access/workspace-access.module';
 import { BillingController } from './billing.controller';
-import { BILLING_PROVIDER, StripeBillingProvider, STRIPE_OPTIONS, type StripeBillingOptions } from './billing.provider';
+import { BILLING_PROVIDER, MockBillingProvider, StripeBillingProvider, STRIPE_OPTIONS, type BillingProvider, type StripeBillingOptions } from './billing.provider';
 import { BillingService } from './billing.service';
 import { BillingUsageService } from './billing-usage.service';
 import { BillingWebhookController } from './billing-webhook.controller';
@@ -16,5 +16,5 @@ const stripeOptions = (): StripeBillingOptions => ({
   webhookToleranceSeconds: Number(process.env.STRIPE_WEBHOOK_TOLERANCE_SECONDS ?? 300),
 });
 
-@Module({ imports: [WorkspaceAccessModule], controllers: [BillingController, BillingWebhookController], providers: [BillingUsageService, BillingService, { provide: STRIPE_OPTIONS, useFactory: stripeOptions }, StripeBillingProvider, { provide: BILLING_PROVIDER, useExisting: StripeBillingProvider }], exports: [BillingUsageService] })
+@Module({ imports: [WorkspaceAccessModule], controllers: [BillingController, BillingWebhookController], providers: [BillingUsageService, BillingService, { provide: STRIPE_OPTIONS, useFactory: stripeOptions }, StripeBillingProvider, MockBillingProvider, { provide: BILLING_PROVIDER, useFactory: (stripe: StripeBillingProvider, mock: MockBillingProvider): BillingProvider => process.env.BILLING_PROVIDER === 'stripe' ? stripe : mock, inject: [StripeBillingProvider, MockBillingProvider] }], exports: [BillingUsageService] })
 export class BillingModule {}

@@ -58,8 +58,13 @@ export class BillingService {
   async portal(userId: string, workspaceId: string) {
     await this.billingAccess(userId, workspaceId);
     const subscription = await this.usageService.ensureSubscription(workspaceId);
-    if (!subscription.providerCustomerId) throw new NotFoundException('No Stripe billing customer exists for this workspace');
-    return this.provider.createPortalSession({ providerCustomerId: subscription.providerCustomerId });
+    let customerId = subscription.providerCustomerId;
+    if (!customerId && this.provider.createCustomer) {
+      customerId = await this.provider.createCustomer(workspaceId);
+      await this.db.workspaceSubscription.update({ where: { workspaceId }, data: { providerCustomerId: customerId } });
+    }
+    if (!customerId) throw new NotFoundException('No billing customer exists for this workspace');
+    return this.provider.createPortalSession({ providerCustomerId: customerId });
   }
 
   async handleWebhook(event: StripeWebhookEvent) {
