@@ -12,6 +12,7 @@ describe('OnboardingService', () => {
       organization: { create: jest.fn().mockResolvedValue(organization) },
       workspace: { create: jest.fn().mockResolvedValue(workspace) },
       workspaceMember: { create: jest.fn().mockResolvedValue({ role: 'ADMIN' }) },
+      onboardingProgress: { upsert: jest.fn().mockResolvedValue({}) },
     };
     const db = { $transaction: jest.fn((callback: (client: typeof tx) => Promise<unknown>) => callback(tx)), organizationMember: { findMany: jest.fn() } };
     return { db, tx, organization, workspace };
@@ -46,17 +47,17 @@ describe('OnboardingService', () => {
     expect(result).toEqual({ organization, workspace });
   });
 
-  it('rejects a repeated onboarding attempt for an existing member', async () => {
+  it('reuses the existing owner workspace when onboarding is retried', async () => {
     // Arrange
     const { db, tx } = createTransactionDatabase();
-    tx.organizationMember.findFirst.mockResolvedValue({ organizationId: 'existing-org' });
+    tx.organizationMember.findFirst.mockResolvedValue({ organizationId: 'org-1', organization: { id: 'org-1', workspaces: [{ id: 'workspace-1' }] } });
     const service = new OnboardingService(db as never);
 
     // Act
     const action = service.create('user-1', input);
 
     // Assert
-    await expect(action).rejects.toThrow(new ConflictException('Onboarding is already complete'));
+    await expect(action).resolves.toEqual({ organization: { id: 'org-1', workspaces: [{ id: 'workspace-1' }] }, workspace: { id: 'workspace-1' } });
     expect(tx.organization.create).not.toHaveBeenCalled();
   });
 
