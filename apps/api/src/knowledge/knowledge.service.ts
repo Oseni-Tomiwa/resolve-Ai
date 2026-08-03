@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
 import { LocalStorage } from '@resolveai/storage';
@@ -11,10 +13,12 @@ import type { KnowledgeChunkQueryDto, KnowledgeListQueryDto } from './dto';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { BillingUsageService } from '../billing/billing-usage.service';
 
-const allowedMimeTypes = new Set(['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown']);
+const allowedMimeTypes = new Set(['application/pdf', 'text/plain', 'text/markdown', 'text/x-markdown', 'text/html']);
 const maxFileSize = Number(process.env.KNOWLEDGE_MAX_FILE_SIZE_BYTES ?? 10 * 1024 * 1024);
 const safeName = (name: string): string => name.normalize('NFKC').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 160) || 'document';
 const publicDocument = (document: Record<string, unknown>) => { const { storageKey: _storageKey, extractedText: _extractedText, _count: _documentCount, ...metadata } = document; return metadata; };
+const blockedHost = (host: string): boolean => { const value = host.toLowerCase(); if (value === 'localhost' || value.endsWith('.localhost') || value === 'metadata.google.internal') return true; const version = isIP(value); if (version === 4) { const [a, b = 0] = value.split('.').map(Number); return a === 10 || a === 127 || a === 169 && b === 254 || a === 192 && b === 168 || a === 172 && b >= 16 && b <= 31; } return version === 6 && (value === '::1' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:')); };
+async function assertPublicUrl(value: string): Promise<URL> { let url: URL; try { url = new URL(value); } catch { throw new ConflictException('Enter a valid public http or https URL'); } if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port) throw new ConflictException('Only public http and https URLs are supported'); const addresses = await lookup(url.hostname, { all: true }); if (!addresses.length || addresses.some((address) => blockedHost(address.address))) throw new ConflictException('Private and local network URLs are not allowed'); return url; }
 type Access = { organizationRole: string; workspaceRole: string; organizationId: string };
 type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'EMBEDDING' | 'READY' | 'FAILED';
 
@@ -45,12 +49,29 @@ export class KnowledgeService {
     await this.billingUsage?.assertCanConsume(workspaceId, 'DOCUMENTS');
     await this.billingUsage?.assertCanConsume(workspaceId, 'STORAGE', file.size);
     const id = randomUUID(); const originalFileName = file.originalname.normalize('NFKC').slice(0, 255); const storageKey = `knowledge/${workspaceId}/${id}/${safeName(originalFileName)}`;
+    const duplicate = await this.db.knowledgeDocument.findFirst({ where: { workspaceId, deletedAt: null, originalFileName, mimeType: file.mimetype, sizeBytes: file.size, status: { not: 'FAILED' } }, select: { id: true, name: true, status: true } });
+    if (duplicate) throw new ConflictException(`This document is already in the workspace (${duplicate.name})`);
     await this.storage.save(storageKey, file.buffer);
     try {
       const document = await this.db.knowledgeDocument.create({ data: { id, workspaceId, uploadedByUserId: userId, name: originalFileName, originalFileName, mimeType: file.mimetype, sizeBytes: file.size, storageKey }, include: { uploadedBy: { select: { firstName: true, lastName: true, email: true } } } });
       try { await this.queue.add(document.id, workspaceId); } catch (error) { await this.db.knowledgeDocument.delete({ where: { id: document.id } }); throw error; }
       return publicDocument(document as unknown as Record<string, unknown>);
     } catch (error) { await this.storage.delete(storageKey); throw error; }
+  }
+
+  async addUrl(userId: string, workspaceId: string, rawUrl: string): Promise<Record<string, unknown>> {
+    await this.requireUploadAccess(userId, workspaceId);
+    const url = await assertPublicUrl(rawUrl.trim());
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(15_000), headers: { Accept: 'text/html,text/plain;q=0.9' } });
+    if (response.status >= 300 && response.status < 400) { const location = response.headers.get('location'); if (!location) throw new ConflictException('The website returned an invalid redirect'); return this.addUrl(userId, workspaceId, new URL(location, url).toString()); }
+    if (!response.ok) throw new ConflictException('The website could not be fetched');
+    const type = response.headers.get('content-type')?.split(';')[0]?.trim() ?? 'text/html'; if (!['text/html', 'text/plain'].includes(type)) throw new ConflictException('Only HTML and plain-text website sources are supported'); const declaredSize = Number(response.headers.get('content-length') ?? 0); if (declaredSize > maxFileSize) throw new ConflictException('Website content must be 10 MB or smaller');
+    const buffer = Buffer.from(await response.arrayBuffer()); if (buffer.length === 0 || buffer.length > maxFileSize) throw new ConflictException('Website content must be between 1 byte and 10 MB');
+    const name = url.hostname + url.pathname; const duplicate = await this.db.knowledgeDocument.findFirst({ where: { workspaceId, deletedAt: null, originalFileName: url.toString(), status: { not: 'FAILED' } }, select: { id: true, name: true, status: true } }); if (duplicate) throw new ConflictException(`This website source is already in the workspace (${duplicate.name})`);
+    await this.billingUsage?.assertCanConsume(workspaceId, 'DOCUMENTS'); await this.billingUsage?.assertCanConsume(workspaceId, 'STORAGE', buffer.length);
+    const id = randomUUID(); const storageKey = `knowledge/${workspaceId}/${id}/${safeName(name)}.html`;
+    await this.storage.save(storageKey, buffer);
+    try { const document = await this.db.knowledgeDocument.create({ data: { id, workspaceId, uploadedByUserId: userId, name, originalFileName: url.toString(), mimeType: type, sizeBytes: buffer.length, storageKey }, include: { uploadedBy: { select: { firstName: true, lastName: true, email: true } } } }); try { await this.queue.add(document.id, workspaceId); } catch (error) { await this.db.knowledgeDocument.delete({ where: { id: document.id } }); throw error; } return publicDocument(document as unknown as Record<string, unknown>); } catch (error) { await this.storage.delete(storageKey); throw error; }
   }
 
   async list(userId: string, workspaceId: string, query: KnowledgeListQueryDto) {
