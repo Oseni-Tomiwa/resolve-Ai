@@ -6,6 +6,11 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      # Prisma schema validation only requires a syntactically valid value;
+      # no database connection is made by this workflow.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/resolveai_ci
+      REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

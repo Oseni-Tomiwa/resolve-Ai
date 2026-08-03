@@ -1,1 +1,0 @@
-{ "name": "@resolveai/widget", "version": "0.1.0", "private": true, "type": "module", "scripts": { "dev": "tsc --watch", "build": "tsc", "lint": "tsc --noEmit", "typecheck": "tsc --noEmit", "test": "echo 'widget tests pending'" }, "devDependencies": { "typescript": "^5.7.2" } }

@@ -17,4 +17,13 @@ describe('knowledge processing', () => {
     // Assert
     expect(result).toBe('');
   });
+
+  it('extracts readable text from HTML without scripts or markup', async () => {
+    // Arrange
+    const contents = Buffer.from('<html><script>alert(1)</script><main>Reset your password</main></html>');
+    // Act
+    const result = await extractText('text/html', contents);
+    // Assert
+    expect(result).toBe('Reset your password');
+  });
 });
