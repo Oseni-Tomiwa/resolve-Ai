@@ -1,0 +1,1 @@
+import { Module } from '@nestjs/common'; import { WorkspaceAccessModule } from '../workspace-access/workspace-access.module'; import { WebhooksController } from './webhooks.controller'; import { WebhooksService } from './webhooks.service'; @Module({imports:[WorkspaceAccessModule],controllers:[WebhooksController],providers:[WebhooksService]}) export class WebhooksModule {}

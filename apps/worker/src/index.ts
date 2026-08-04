@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { prisma } from '@resolveai/database';
-import { LocalStorage } from '@resolveai/storage';
+import { createStorageFromEnv } from '@resolveai/storage';
 import { loadEmbeddingEnv, loadRootEnv, validateRuntimeEnv } from '@resolveai/config';
 import { chunkText } from './chunking.js';
 import { createProductionEmbeddingProvider, embedDocumentChunks } from './embedding.js';
@@ -16,7 +16,7 @@ const log = (line: string): void => { try { writeWorkerLog(JSON.parse(line) as R
 
 const queueName = 'knowledge-processing';
 const connection = { url: runtimeEnv.REDIS_URL };
-const storage = new LocalStorage(runtimeEnv.KNOWLEDGE_STORAGE_DIR);
+const storage = createStorageFromEnv(process.env);
 
 const withTimeout = <T>(task: Promise<T>, timeoutMs: number): Promise<T> => new Promise<T>((resolve, reject) => { const timer = setTimeout(() => reject(new Error('WORKER_JOB_TIMEOUT')), timeoutMs); task.then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error); }); });
 

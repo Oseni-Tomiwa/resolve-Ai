@@ -2,7 +2,7 @@ import { ConflictException, ForbiddenException, NotFoundException } from '@nestj
 import { KnowledgeService } from './knowledge.service';
 import type { KnowledgeQueueService } from './knowledge-queue.service';
 
-jest.mock('@resolveai/storage', () => ({ LocalStorage: jest.fn().mockImplementation(() => ({ save: jest.fn(), delete: jest.fn() })) }));
+jest.mock('@resolveai/storage', () => ({ createStorageFromEnv: jest.fn().mockReturnValue({ save: jest.fn(), delete: jest.fn() }), LocalStorage: jest.fn() }));
 
 type Db = {
   workspace: { findUnique: jest.Mock };

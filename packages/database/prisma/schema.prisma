@@ -703,3 +703,54 @@ model AuditLog {
   @@index([organizationId, action, createdAt])
   @@index([workspaceId, actorUserId, createdAt])
 }
+
+model WorkspaceApiKey {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  createdByUserId String @db.Uuid
+  name String
+  prefix String
+  secretHash String @unique
+  scopes String[] @default([])
+  expiresAt DateTime?
+  revokedAt DateTime?
+  lastUsedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([workspaceId, revokedAt])
+  @@unique([workspaceId, name])
+}
+
+model OutboundWebhook {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  createdByUserId String @db.Uuid
+  name String
+  url String
+  secretCiphertext String
+  events String[] @default([])
+  enabled Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([workspaceId, enabled])
+  @@unique([workspaceId, name])
+}
+
+model WebhookDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  webhookId String @db.Uuid
+  workspaceId String @db.Uuid
+  eventId String
+  eventType String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime?
+  responseStatus Int?
+  errorCategory String?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([webhookId, eventId])
+  @@index([workspaceId, status, nextAttemptAt])
+}

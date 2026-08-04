@@ -3,7 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
-import { LocalStorage } from '@resolveai/storage';
+import { createStorageFromEnv, LocalStorage } from '@resolveai/storage';
 import type { Express } from 'express';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -24,7 +24,7 @@ type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'EMBEDDING' | 'READY' | 'FAILE
 
 @Injectable()
 export class KnowledgeService {
-  private readonly storage = new LocalStorage(process.env.KNOWLEDGE_STORAGE_DIR);
+  private readonly storage = typeof createStorageFromEnv === 'function' ? createStorageFromEnv(process.env) : new LocalStorage(process.env.KNOWLEDGE_STORAGE_DIR);
   constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly queue: KnowledgeQueueService, @Optional() private readonly billingUsage?: BillingUsageService) {}
 
   private async access(userId: string, workspaceId: string): Promise<Access> {

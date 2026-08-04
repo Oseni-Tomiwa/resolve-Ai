@@ -16,6 +16,8 @@ import { BillingModule } from './billing/billing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { AuditLogModule } from './audit-log/audit-log.module';
     InboxModule,
     BillingModule,
     AnalyticsModule,
+    ApiKeysModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}
