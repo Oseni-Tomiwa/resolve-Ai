@@ -69,4 +69,28 @@ describe('WorkspaceAccessService', () => {
     db.workspaceInvitation.findFirst.mockResolvedValue({ ...invitation, acceptedAt: new Date() });
     await expect(service.acceptInvitation('member-1', 'raw-invitation-token-value')).rejects.toThrow(new NotFoundException('Invitation is invalid or expired'));
   });
+  it('prevents users from changing their own role', async () => {
+    const db = database();
+    const service = new WorkspaceAccessService(db as never, new EmailService());
+    await expect(service.updateMember('owner-1', 'workspace-1', 'owner-1', { role: 'VIEWER' })).rejects.toThrow(new ForbiddenException('You cannot change your own workspace role'));
+  });
+
+  it('prevents suspending the final active workspace admin', async () => {
+    const db = database();
+    db.organizationMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+    db.workspaceMember.findUnique.mockResolvedValue({ role: 'ADMIN', status: 'ACTIVE' });
+    db.workspaceMember.count.mockResolvedValue(1);
+    const service = new WorkspaceAccessService(db as never, new EmailService());
+    await expect(service.suspendMember('manager-1', 'workspace-1', 'admin-1')).rejects.toThrow(new ForbiddenException('The final workspace admin cannot be suspended'));
+  });
+
+  it('suspends and reactivates a member without changing their role', async () => {
+    const db = database();
+    db.workspaceMember.findUnique.mockResolvedValue({ role: 'AGENT', status: 'ACTIVE' });
+    const service = new WorkspaceAccessService(db as never, new EmailService());
+    await service.suspendMember('owner-1', 'workspace-1', 'agent-1');
+    expect(db.workspaceMember.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'SUSPENDED' }) }));
+    await service.reactivateMember('owner-1', 'workspace-1', 'agent-1');
+    expect(db.workspaceMember.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: { status: 'ACTIVE', suspendedAt: null } }));
+  });
 });

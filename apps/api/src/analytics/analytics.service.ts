@@ -3,6 +3,7 @@ import type { PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs this service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { WorkspaceAccessService } from '../workspace-access/workspace-access.service';
+import type { AnalyticsQueryDto } from './analytics.dto';
 
 type DayRow = { date: string; total: number; ai: number; human: number };
 type MessageRow = { conversationId: string; role: string; status: string; createdAt: Date; inputTokens: number | null; outputTokens: number | null; sources: Array<{ documentId: string; documentNameSnapshot: string }> };
@@ -12,9 +13,10 @@ const day = (date: Date): string => date.toISOString().slice(0, 10);
 export class AnalyticsService {
   constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly access: WorkspaceAccessService) {}
 
-  async get(userId: string, workspaceId: string) {
+  async get(userId: string, workspaceId: string, query: AnalyticsQueryDto = {}) {
     await this.access.assertMember(userId, workspaceId);
-    const since = new Date(); since.setDate(since.getDate() - 30);
+    const days = query.days ?? 30;
+    const since = new Date(); since.setDate(since.getDate() - days);
     const [aiConversations, widgetConversations, activeDocuments, activeAgents, aiMessages, widgetMessages] = await Promise.all([
       this.db.aIConversation.findMany({ where: { workspaceId, deletedAt: null, createdAt: { gte: since } }, select: { createdAt: true } }),
       this.db.widgetConversation.findMany({ where: { workspaceId, createdAt: { gte: since } }, select: { createdAt: true, mode: true, status: true, assignedUserId: true, resolvedAt: true } }),
@@ -41,7 +43,7 @@ export class AnalyticsService {
     const humanHandoffs = widgetConversations.filter((conversation) => conversation.mode === 'HUMAN').length;
     const resolved = widgetConversations.filter((conversation) => conversation.status === 'RESOLVED').length;
     return {
-      range: { days: 30, since },
+      range: { days, since },
       kpis: { totalConversations: aiConversations.length + widgetConversations.length, aiResolved: Math.max(0, assistantMessages.length - humanHandoffs), humanHandoffs, averageResponseTimeSeconds: responseTimes.length ? responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length : null, activeDocuments, activeAgents },
       conversationsOverTime: [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date)),
       tokenUsage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens },

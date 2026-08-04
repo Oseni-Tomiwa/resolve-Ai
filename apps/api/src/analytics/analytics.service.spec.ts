@@ -26,4 +26,17 @@ describe('AnalyticsService', () => {
     expect(result.inbox).toEqual({ open: 0, assigned: 0, closed: 1 });
     expect(access.assertMember).toHaveBeenCalledWith('user-1', 'workspace-1');
   });
+  it('applies the requested analytics range to workspace queries', async () => {
+    const now = new Date();
+    const db = {
+      aIConversation: { findMany: jest.fn().mockResolvedValue([]) }, widgetConversation: { findMany: jest.fn().mockResolvedValue([]) },
+      knowledgeDocument: { count: jest.fn().mockResolvedValue(0) }, aIAgent: { count: jest.fn().mockResolvedValue(0) },
+      aIMessage: { findMany: jest.fn().mockResolvedValue([]) }, widgetMessage: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new AnalyticsService(db as never, { assertMember: jest.fn().mockResolvedValue(undefined) } as never);
+    const result = await service.get('user-1', 'workspace-1', { days: 7 });
+    expect(result.range.days).toBe(7);
+    expect(db.aIConversation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ createdAt: { gte: expect.any(Date) } }) }));
+    expect((db.aIConversation.findMany.mock.calls[0][0] as { where: { createdAt: { gte: Date } } }).where.createdAt.gte.getTime()).toBeGreaterThan(now.getTime() - 8 * 24 * 60 * 60 * 1000);
+  });
 });

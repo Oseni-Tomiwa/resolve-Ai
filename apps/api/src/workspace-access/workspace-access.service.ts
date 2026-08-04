@@ -28,6 +28,7 @@ export class WorkspaceAccessService {
       this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } }),
     ]);
     if (!organizationMember || (!workspaceMember && !['OWNER', 'ADMIN'].includes(organizationMember.role))) throw new ForbiddenException('Workspace membership required');
+    if (workspaceMember?.status === 'SUSPENDED') throw new ForbiddenException('Workspace membership is suspended');
     return { organizationId: workspace.organizationId, organizationRole: organizationMember.role, workspaceRole: workspaceMember?.role ?? '' };
   }
   async assertMember(userId: string, workspaceId: string): Promise<void> { await this.getAccess(userId, workspaceId); }
@@ -89,7 +90,7 @@ export class WorkspaceAccessService {
       const claimed = await tx.workspaceInvitation.updateMany({ where: { id: invitation.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, data: { acceptedAt: new Date() } });
       if (claimed.count !== 1) throw new ConflictException('Invitation has already been accepted');
       await tx.organizationMember.upsert({ where: { userId_organizationId: { userId, organizationId: invitation.organizationId } }, update: {}, create: { userId, organizationId: invitation.organizationId, role: 'MEMBER' } });
-      await tx.workspaceMember.upsert({ where: { workspaceId_userId: { workspaceId: invitation.workspaceId, userId } }, update: { role: invitation.role }, create: { workspaceId: invitation.workspaceId, userId, role: invitation.role } });
+      await tx.workspaceMember.upsert({ where: { workspaceId_userId: { workspaceId: invitation.workspaceId, userId } }, update: { role: invitation.role, status: 'ACTIVE', suspendedAt: null }, create: { workspaceId: invitation.workspaceId, userId, role: invitation.role } });
       return { workspaceId: invitation.workspaceId, organizationId: invitation.organizationId, role: invitation.role };
     });
   }
@@ -98,14 +99,35 @@ export class WorkspaceAccessService {
 
   async updateMember(userId: string, workspaceId: string, memberId: string, dto: UpdateMemberRoleDto) {
     const access = await this.requireManager(userId, workspaceId);
+    if (memberId === userId) throw new ForbiddenException('You cannot change your own workspace role');
     if (access.workspaceRole === 'ADMIN' && access.organizationRole === 'MEMBER' && dto.role === 'ADMIN') throw new ForbiddenException('Workspace admins may only assign AGENT or VIEWER');
     const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
     if (!member) throw new NotFoundException('Workspace member not found');
+    if (member.role === 'ADMIN' && dto.role !== 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN', status: 'ACTIVE' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be demoted'); }
     return this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { role: dto.role } });
+  }
+
+  async suspendMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
+    const access = await this.requireManager(userId, workspaceId);
+    if (memberId === userId) throw new ForbiddenException('You cannot suspend yourself');
+    const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
+    if (!member) throw new NotFoundException('Workspace member not found');
+    const orgMember = await this.db.organizationMember.findUnique({ where: { userId_organizationId: { userId: memberId, organizationId: access.organizationId } } });
+    if (orgMember?.role === 'OWNER') throw new ForbiddenException('The organization owner cannot be suspended');
+    if (member.role === 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN', status: 'ACTIVE' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be suspended'); }
+    await this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { status: 'SUSPENDED', suspendedAt: new Date() } });
+  }
+
+  async reactivateMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
+    await this.requireManager(userId, workspaceId);
+    const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
+    if (!member) throw new NotFoundException('Workspace member not found');
+    await this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { status: 'ACTIVE', suspendedAt: null } });
   }
 
   async removeMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
     const access = await this.requireManager(userId, workspaceId);
+    if (memberId === userId) throw new ForbiddenException('You cannot remove yourself from the workspace');
     const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
     if (!member) throw new NotFoundException('Workspace member not found');
     const orgMember = await this.db.organizationMember.findUnique({ where: { userId_organizationId: { userId: memberId, organizationId: access.organizationId } } });
