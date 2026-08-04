@@ -1,0 +1,2 @@
+import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+export class AuditLogQueryDto { @IsOptional() @IsInt() @Min(1) @Max(100) page = 1; @IsOptional() @IsInt() @Min(1) @Max(100) pageSize = 25; @IsOptional() @IsString() action?: string; @IsOptional() @IsString() actorUserId?: string; @IsOptional() @IsString() targetType?: string; @IsOptional() @IsDateString() from?: string; @IsOptional() @IsDateString() to?: string; }

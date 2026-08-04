@@ -11,6 +11,8 @@ import { processingErrorCategory } from './error-category.js';
 
 loadRootEnv();
 const runtimeEnv = validateRuntimeEnv(process.env);
+const writeWorkerLog = (event: Record<string, unknown>): void => { const safe = Object.fromEntries(Object.entries(event).filter(([key, value]) => !['password','token','cookie','authorization','secret','apiKey','content','body'].some((part) => key.toLowerCase().includes(part)) && value !== undefined && !(typeof value === 'string' && value.length > 500))); console.info(JSON.stringify({ timestamp: new Date().toISOString(), service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, ...safe })); };
+const log = (line: string): void => { try { writeWorkerLog(JSON.parse(line) as Record<string, unknown>); } catch { writeWorkerLog({ event: 'worker.log_parse_failed' }); } };
 
 const queueName = 'knowledge-processing';
 const connection = { url: runtimeEnv.REDIS_URL };
@@ -21,14 +23,14 @@ const withTimeout = <T>(task: Promise<T>, timeoutMs: number): Promise<T> => new 
 async function processDocument(documentId: string, workspaceId: string): Promise<void> {
   const document = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, workspaceId, deletedAt: null } });
   if (!document) return;
-  console.info(JSON.stringify({ event: 'knowledge.document_processing_started', documentId, workspaceId, mimeType: document.mimeType }));
+  log(JSON.stringify({ event: 'knowledge.document_processing_started', documentId, workspaceId, mimeType: document.mimeType }));
   await prisma.knowledgeDocument.update({ where: { id: document.id }, data: { status: 'PROCESSING', processingError: null } });
   try {
     const text = await extractText(document.mimeType, await storage.read(document.storageKey));
-    console.info(JSON.stringify({ event: 'knowledge.document_extracted', documentId, workspaceId, characterCount: text.length }));
+    log(JSON.stringify({ event: 'knowledge.document_extracted', documentId, workspaceId, characterCount: text.length }));
     const chunks = chunkText(text);
     if (chunks.length === 0) throw new Error('No readable text was found in this document');
-    console.info(JSON.stringify({ event: 'knowledge.document_chunked', documentId, workspaceId, chunkCount: chunks.length }));
+    log(JSON.stringify({ event: 'knowledge.document_chunked', documentId, workspaceId, chunkCount: chunks.length }));
     const committed = await prisma.$transaction(async (tx) => {
       const current = await tx.knowledgeDocument.findFirst({ where: { id: document.id, workspaceId, deletedAt: null }, select: { id: true } });
       if (!current) return false;
@@ -48,18 +50,18 @@ async function processDocument(documentId: string, workspaceId: string): Promise
       return true;
     });
     if (!committed) return;
-    console.info(JSON.stringify({ event: 'knowledge.document_chunks_persisted', documentId, workspaceId, chunkCount: chunks.length }));
+    log(JSON.stringify({ event: 'knowledge.document_chunks_persisted', documentId, workspaceId, chunkCount: chunks.length }));
     const embeddingEnv = loadEmbeddingEnv(process.env);
     const embeddingProvider = createProductionEmbeddingProvider(embeddingEnv);
-    console.info(JSON.stringify({ event: 'knowledge.embedding_generation_started', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, batchSize: embeddingEnv.EMBEDDING_BATCH_SIZE, chunkCount: chunks.length }));
+    log(JSON.stringify({ event: 'knowledge.embedding_generation_started', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, batchSize: embeddingEnv.EMBEDDING_BATCH_SIZE, chunkCount: chunks.length }));
     const result = await embedDocumentChunks(prisma, document.id, workspaceId, embeddingProvider, embeddingEnv.EMBEDDING_BATCH_SIZE);
-    console.info(JSON.stringify({ event: 'knowledge.embedding_generation_completed', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
+    log(JSON.stringify({ event: 'knowledge.embedding_generation_completed', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'READY', processingError: null } });
-    console.info(JSON.stringify({ event: 'knowledge.document_ready', documentId, workspaceId, chunkCount: chunks.length, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
+    log(JSON.stringify({ event: 'knowledge.document_ready', documentId, workspaceId, chunkCount: chunks.length, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
   } catch (error) {
     const category = processingErrorCategory(error);
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'FAILED', processingError: category } });
-    console.error(JSON.stringify({ event: 'knowledge.document_failed', documentId, workspaceId, category }));
+    log(JSON.stringify({ event: 'knowledge.document_failed', documentId, workspaceId, category }));
     throw error;
   }
 }
@@ -90,13 +92,13 @@ const healthServer = createServer(async (request, response) => {
   response.statusCode = ready ? 200 : 503;
   response.end(JSON.stringify({ success: ready, data: { status: ready ? 'ready' : 'degraded', worker: worker.isRunning() ? 'ok' : 'unavailable', database, redis } }));
 });
-healthServer.listen(runtimeEnv.WORKER_PORT, () => console.info(JSON.stringify({ event: 'knowledge.worker_health_ready', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, port: runtimeEnv.WORKER_PORT })));
+healthServer.listen(runtimeEnv.WORKER_PORT, () => log(JSON.stringify({ event: 'knowledge.worker_health_ready', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, port: runtimeEnv.WORKER_PORT })));
 
-worker.on('failed', (job, error) => console.error(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, category: processingErrorCategory(error) })));
-worker.on('error', (error) => console.error(JSON.stringify({ event: 'knowledge.worker_error', category: processingErrorCategory(error) })));
-void recoverInterruptedDocuments().catch(() => console.error(JSON.stringify({ event: 'knowledge.recovery_failed', category: 'DATABASE_UNAVAILABLE' })));
-console.info(JSON.stringify({ event: 'knowledge.worker_ready', queue: queueName }));
+worker.on('failed', (job, error) => log(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, category: processingErrorCategory(error) })));
+worker.on('error', (error) => log(JSON.stringify({ event: 'knowledge.worker_error', category: processingErrorCategory(error) })));
+void recoverInterruptedDocuments().catch(() => log(JSON.stringify({ event: 'knowledge.recovery_failed', category: 'DATABASE_UNAVAILABLE' })));
+log(JSON.stringify({ event: 'knowledge.worker_ready', queue: queueName }));
 
-async function shutdown(signal: string): Promise<void> { console.info(JSON.stringify({ event: 'knowledge.worker_shutdown', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, signal })); await new Promise<void>((resolve) => healthServer.close(() => resolve())); await worker.close(); await readinessRedis.quit().catch(() => undefined); await prisma.$disconnect(); }
+async function shutdown(signal: string): Promise<void> { log(JSON.stringify({ event: 'knowledge.worker_shutdown', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, signal })); await new Promise<void>((resolve) => healthServer.close(() => resolve())); await worker.close(); await readinessRedis.quit().catch(() => undefined); await prisma.$disconnect(); }
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));

@@ -15,11 +15,13 @@ import { InboxModule } from './inbox/inbox.module';
 import { BillingModule } from './billing/billing.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CommonModule } from './common/common.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 
 @Module({
   imports: [
     DatabaseModule,
     CommonModule,
+    AuditLogModule,
     HealthModule,
     AuthModule,
     UsersModule,

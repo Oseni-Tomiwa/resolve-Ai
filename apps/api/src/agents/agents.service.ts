@@ -1,10 +1,13 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs the service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { GroundedAnswerService } from '../knowledge/grounded-answer.service';
 import { defaultAgent, defaultAgentMaxOutputTokens, defaultAgentModel, defaultAgentTemperature } from './agent.config';
 import type { AgentListQueryDto, AgentPlaygroundDto, CreateAgentDto, UpdateAgentDto } from './dto';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 const canManage = (organizationRole: string, workspaceRole: string): boolean => ['OWNER', 'ADMIN'].includes(organizationRole) || workspaceRole === 'ADMIN';
 const slugify = (value: string): string => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'agent';
@@ -13,7 +16,7 @@ const agentDocumentInclude = { knowledgeDocuments: { select: { knowledgeDocument
 
 @Injectable()
 export class AgentsService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService, @Optional() private readonly audit?: AuditLogService) {}
 
   private async access(userId: string, workspaceId: string) {
     const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
@@ -90,6 +93,8 @@ export class AgentsService {
         if (documentIds.length) await tx.agentKnowledgeDocument.createMany({ data: documentIds.map((knowledgeDocumentId) => ({ agentId: created.id, knowledgeDocumentId, workspaceId })) });
         return created;
       });
+      await this.audit?.record({ organizationId: (await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } }))!.organizationId, workspaceId, actorUserId: userId, action: 'agent.created', targetType: 'ai_agent', targetId: agent.id, metadata: { status: agent.status } });
+      await this.audit?.record({ organizationId: (await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } }))!.organizationId, workspaceId, actorUserId: userId, action: 'agent.updated', targetType: 'ai_agent', targetId: agent.id, metadata: { status: agent.status } });
       return this.view(agent, true);
     } catch (error) {
       if ((error as { code?: string }).code === 'P2002') throw new ConflictException('An agent with this name already exists in the workspace');
@@ -153,6 +158,8 @@ export class AgentsService {
     if (!agent) throw new NotFoundException('Agent not found');
     if (agent.isDefault) throw new ConflictException('Choose another default agent before deleting this agent');
     await this.db.aIAgent.update({ where: { id: agentId }, data: { deletedAt: new Date(), status: 'DISABLED' } });
+    const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
+    if (workspace) await this.audit?.record({ organizationId: workspace.organizationId, workspaceId, actorUserId: userId, action: 'agent.deleted', targetType: 'ai_agent', targetId: agentId });
   }
 
   async duplicate(userId: string, workspaceId: string, agentId: string) {
@@ -169,6 +176,8 @@ export class AgentsService {
     if (!current) throw new NotFoundException('Agent not found');
     if (!current.name.trim() || !current.instructions.trim()) throw new ConflictException('Name and instructions are required before publishing');
     const published = await this.db.aIAgent.update({ where: { id: agentId }, data: { status: 'ACTIVE', publishedAt: new Date(), publishedByUserId: userId }, include: agentDocumentInclude });
+    const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
+    if (workspace) await this.audit?.record({ organizationId: workspace.organizationId, workspaceId, actorUserId: userId, action: 'agent.published', targetType: 'ai_agent', targetId: agentId });
     return this.view(published, true);
   }
 
@@ -177,7 +186,10 @@ export class AgentsService {
     const current = await this.db.aIAgent.findFirst({ where: { id: agentId, workspaceId, deletedAt: null } });
     if (!current) throw new NotFoundException('Agent not found');
     if (current.isDefault) throw new ConflictException('Choose another default agent before archiving this agent');
-    return this.db.aIAgent.update({ where: { id: agentId }, data: { status: 'ARCHIVED', deletedAt: new Date() } });
+    const archived = await this.db.aIAgent.update({ where: { id: agentId }, data: { status: 'ARCHIVED', deletedAt: new Date() } });
+    const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
+    if (workspace) await this.audit?.record({ organizationId: workspace.organizationId, workspaceId, actorUserId: userId, action: 'agent.archived', targetType: 'ai_agent', targetId: agentId });
+    return archived;
   }
 
   async selectableDocuments(userId: string, workspaceId: string) {

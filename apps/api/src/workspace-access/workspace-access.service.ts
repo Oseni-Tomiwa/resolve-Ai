@@ -1,10 +1,13 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { EmailService } from './email.service';
 import type { CreateInvitationDto, UpdateMemberRoleDto } from './dto';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
@@ -18,7 +21,7 @@ type Access = { organizationId: string; organizationRole: string; workspaceRole:
 
 @Injectable()
 export class WorkspaceAccessService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly email: EmailService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly email: EmailService, @Optional() private readonly audit?: AuditLogService) {}
 
   async getAccess(userId: string, workspaceId: string): Promise<Access> {
     const workspace = await this.db.workspace.findFirst({ where: { id: workspaceId }, select: { organizationId: true } });
@@ -52,6 +55,7 @@ export class WorkspaceAccessService {
     const invitation = await this.db.workspaceInvitation.create({ data: { workspaceId, organizationId: access.organizationId, invitedByUserId: userId, email, role: dto.role, tokenHash: hashToken(token), expiresAt }, include: { workspace: { select: { name: true } }, organization: { select: { name: true } }, invitedBy: { select: { firstName: true, lastName: true } } } });
     const invitationUrl = `${process.env.WEB_URL ?? 'http://localhost:3000'}/invite/${token}`;
     await this.email.sendInvitation({ invitationUrl, email, role: invitation.role, expiresAt, workspaceName: invitation.workspace.name, organizationName: invitation.organization.name, inviterName: `${invitation.invitedBy.firstName} ${invitation.invitedBy.lastName}` });
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.invited', targetType: 'workspace_invitation', targetId: invitation.id, metadata: { role: invitation.role }, });
     return { ...invitation, localInvitationUrl: process.env.NODE_ENV === 'production' ? undefined : invitationUrl };
   }
 
@@ -70,10 +74,11 @@ export class WorkspaceAccessService {
     const updated = await this.db.workspaceInvitation.update({ where: { id: invitationId }, data: { tokenHash: hashToken(token), expiresAt, organizationId: access.organizationId }, include: { invitedBy: { select: { firstName: true, lastName: true } } } });
     const invitationUrl = `${process.env.WEB_URL ?? 'http://localhost:3000'}/invite/${token}`;
     await this.email.sendInvitation({ invitationUrl, email: updated.email, role: updated.role, expiresAt, workspaceName: invitation.workspace.name, organizationName: invitation.organization.name, inviterName: `${updated.invitedBy.firstName} ${updated.invitedBy.lastName}` });
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId: invitation.workspaceId, actorUserId: userId, action: 'member.invitation_resent', targetType: 'workspace_invitation', targetId: invitation.id });
     return { ...updated, localInvitationUrl: process.env.NODE_ENV === 'production' ? undefined : invitationUrl };
   }
 
-  async revokeInvitation(userId: string, invitationId: string): Promise<void> { const invitation = await this.db.workspaceInvitation.findUnique({ where: { id: invitationId } }); if (!invitation) throw new NotFoundException('Invitation not found'); await this.requireManager(userId, invitation.workspaceId); await this.db.workspaceInvitation.update({ where: { id: invitationId }, data: { revokedAt: new Date() } }); }
+  async revokeInvitation(userId: string, invitationId: string): Promise<void> { const invitation = await this.db.workspaceInvitation.findUnique({ where: { id: invitationId } }); if (!invitation) throw new NotFoundException('Invitation not found'); const access = await this.requireManager(userId, invitation.workspaceId); await this.db.workspaceInvitation.update({ where: { id: invitationId }, data: { revokedAt: new Date() } }); await this.audit?.record({ organizationId: access.organizationId, workspaceId: invitation.workspaceId, actorUserId: userId, action: 'member.invitation_revoked', targetType: 'workspace_invitation', targetId: invitationId }); }
 
   async validateInvitation(token: string) {
     const invitation = await this.db.workspaceInvitation.findFirst({ where: { tokenHash: hashToken(token) }, include: { workspace: { select: { id: true, name: true } }, organization: { select: { id: true, name: true } }, invitedBy: { select: { firstName: true, lastName: true } } } });
@@ -104,7 +109,9 @@ export class WorkspaceAccessService {
     const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
     if (!member) throw new NotFoundException('Workspace member not found');
     if (member.role === 'ADMIN' && dto.role !== 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN', status: 'ACTIVE' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be demoted'); }
-    return this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { role: dto.role } });
+    const updated = await this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { role: dto.role } });
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.role_changed', targetType: 'workspace_member', targetId: memberId, metadata: { role: dto.role } });
+    return updated;
   }
 
   async suspendMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
@@ -116,6 +123,7 @@ export class WorkspaceAccessService {
     if (orgMember?.role === 'OWNER') throw new ForbiddenException('The organization owner cannot be suspended');
     if (member.role === 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN', status: 'ACTIVE' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be suspended'); }
     await this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { status: 'SUSPENDED', suspendedAt: new Date() } });
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.suspended', targetType: 'workspace_member', targetId: memberId });
   }
 
   async reactivateMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
@@ -123,6 +131,8 @@ export class WorkspaceAccessService {
     const member = await this.db.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
     if (!member) throw new NotFoundException('Workspace member not found');
     await this.db.workspaceMember.update({ where: { workspaceId_userId: { workspaceId, userId: memberId } }, data: { status: 'ACTIVE', suspendedAt: null } });
+    const access = await this.requireManager(userId, workspaceId);
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.reactivated', targetType: 'workspace_member', targetId: memberId });
   }
 
   async removeMember(userId: string, workspaceId: string, memberId: string): Promise<void> {
@@ -134,5 +144,6 @@ export class WorkspaceAccessService {
     if (orgMember?.role === 'OWNER') throw new ForbiddenException('The organization owner cannot be removed from a workspace');
     if (member.role === 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be removed'); }
     await this.db.workspaceMember.delete({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.removed', targetType: 'workspace_member', targetId: memberId });
   }
 }
