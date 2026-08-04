@@ -34,6 +34,21 @@ describe('KnowledgeService', () => {
     database.workspaceMember.findUnique.mockResolvedValue({ role: 'AGENT' }); await expect(service.upload('user-1', 'workspace-1', file({ mimetype: 'application/zip' }))).rejects.toThrow(ConflictException); await expect(service.upload('user-1', 'workspace-1', file({ size: 11 * 1024 * 1024 }))).rejects.toThrow(ConflictException); await expect(service.upload('user-1', 'workspace-1', file({ size: 0, buffer: Buffer.alloc(0) }))).rejects.toThrow(ConflictException);
   });
 
+  it('rejects an active duplicate file before writing storage', async () => {
+    // Arrange
+    const database = db(); database.knowledgeDocument.findFirst.mockResolvedValue({ id: 'existing', name: 'guide.txt', status: 'READY' }); const service = new KnowledgeService(database as never, { add: jest.fn() } as unknown as KnowledgeQueueService);
+    // Act / Assert
+    await expect(service.upload('user-1', 'workspace-1', file())).rejects.toThrow('already in the workspace');
+    expect(database.knowledgeDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects local website sources to prevent SSRF', async () => {
+    // Arrange
+    const database = db(); const service = new KnowledgeService(database as never, { add: jest.fn() } as unknown as KnowledgeQueueService);
+    // Act / Assert
+    await expect(service.addUrl('user-1', 'workspace-1', 'http://127.0.0.1:4000/private')).rejects.toThrow(ConflictException);
+  });
+
   it('lists only the current workspace with pagination and search filters', async () => {
     // Arrange
     const database = db(); database.knowledgeDocument.count.mockResolvedValue(1); database.knowledgeDocument.findMany.mockResolvedValue([]); const service = new KnowledgeService(database as never, { add: jest.fn() } as unknown as KnowledgeQueueService);
