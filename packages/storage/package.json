@@ -5,7 +5,26 @@
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./src/index.ts",
-  "exports": { ".": { "types": "./src/index.ts", "require": "./dist/index.js", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p ./tsconfig.build.json", "typecheck": "tsc --noEmit -p ./tsconfig.json", "lint": "pnpm exec eslint src", "test": "echo 'storage tests pending'" },
-  "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "typescript": "^5.7.2" }
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p ./tsconfig.json",
+    "lint": "pnpm exec eslint src",
+    "test": "echo 'storage tests pending'"
+  },
+  "devDependencies": {
+    "@resolveai/eslint-config": "workspace:*",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0"
+  }
 }
