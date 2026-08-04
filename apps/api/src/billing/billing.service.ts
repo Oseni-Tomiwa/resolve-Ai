@@ -1,9 +1,12 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { PrismaClient, SubscriptionPlan } from '@resolveai/database';
 // Nest dependency injection needs this service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { WorkspaceAccessService } from '../workspace-access/workspace-access.service';
 import type { BillingCheckoutDto, BillingPlanDto, ChangeBillingPlanDto } from './billing.dto';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { BILLING_PROVIDER, type BillingProvider, type PlanChangeResult, type StripeWebhookEvent } from './billing.provider';
 // Nest dependency injection needs this service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -11,7 +14,7 @@ import { BillingUsageService } from './billing-usage.service';
 
 @Injectable()
 export class BillingService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly access: WorkspaceAccessService, private readonly usageService: BillingUsageService, @Inject(BILLING_PROVIDER) private readonly provider: BillingProvider) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly access: WorkspaceAccessService, private readonly usageService: BillingUsageService, @Inject(BILLING_PROVIDER) private readonly provider: BillingProvider, @Optional() private readonly audit?: AuditLogService) {}
 
   private async billingAccess(userId: string, workspaceId: string) {
     const access = await this.access.getAccess(userId, workspaceId);
@@ -34,7 +37,7 @@ export class BillingService {
   }
 
   async changePlan(userId: string, workspaceId: string, dto: ChangeBillingPlanDto) {
-    await this.billingAccess(userId, workspaceId);
+    const access = await this.billingAccess(userId, workspaceId);
     const subscription = await this.usageService.ensureSubscription(workspaceId);
     if (dto.plan === 'FREE' && subscription.providerSubscriptionId && this.provider.cancelSubscription) {
       const canceled = await this.provider.cancelSubscription({ providerSubscriptionId: subscription.providerSubscriptionId });
@@ -44,7 +47,9 @@ export class BillingService {
     if (result.checkoutUrl) {
       return this.db.workspaceSubscription.update({ where: { workspaceId }, data: { provider: result.provider, providerCustomerId: result.providerCustomerId ?? subscription.providerCustomerId } }).then((updated) => ({ ...updated, checkoutUrl: result.checkoutUrl }));
     }
-    return this.persistProviderResult(workspaceId, result, subscription.currentPeriodEnd);
+    const persisted = await this.persistProviderResult(workspaceId, result, subscription.currentPeriodEnd);
+    await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'billing.plan_change_initiated', targetType: 'workspace_subscription', targetId: persisted.id, metadata: { plan: dto.plan } });
+    return persisted;
   }
 
   async checkout(userId: string, workspaceId: string, dto: BillingCheckoutDto) {

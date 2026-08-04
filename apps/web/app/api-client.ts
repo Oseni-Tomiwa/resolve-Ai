@@ -1,6 +1,10 @@
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 export const apiBaseUrl = `${configuredApiUrl.replace(/\/$/, '').replace(/\/api\/v1$/, '')}/api/v1`;
 
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly statusCode: number, public readonly code: string, public readonly requestId?: string) { super(message); this.name = 'ApiRequestError'; }
+}
+
 export class ApiNetworkError extends Error {
   constructor() {
     super(process.env.NODE_ENV === 'development' ? `Unable to reach the ResolveAI API at ${apiBaseUrl}. Confirm the API is running on localhost:4000.` : 'Unable to reach the authentication service. Please try again.');
@@ -76,12 +80,12 @@ export async function apiFetch(path: string, init?: RequestInit, options: Reques
 
 export async function apiRequest<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
   const response = await apiFetch(path, init, options);
-  let body: { success: boolean; message?: string; data?: T };
+  let body: { success: boolean; message?: string; data?: T; error?: { code?: string; requestId?: string } };
   try {
     body = await response.json() as { success: boolean; message?: string; data?: T };
   } catch {
     throw new Error(response.ok ? 'The API returned an invalid response.' : `The request failed with status ${response.status}.`);
   }
-  if (!response.ok || !body.success || body.data === undefined) throw new Error(body.message ?? 'The request could not be completed.');
+  if (!response.ok || !body.success || body.data === undefined) { const error = body.error; throw new ApiRequestError(body.message ?? 'The request could not be completed.', response.status, error?.code ?? 'REQUEST_FAILED', error?.requestId ?? response.headers.get('X-Request-Id') ?? undefined); }
   return body.data;
 }

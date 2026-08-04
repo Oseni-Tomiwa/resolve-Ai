@@ -244,3 +244,9 @@ em { color: var(--violet); font-style: normal; }
 .inbox-page .dashboard-error { margin-top: 18px; }
 @keyframes inbox-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (max-width: 760px) { .inbox-layout { display: block; min-height: 0; }.inbox-layout.has-selection .inbox-list { display: none; }.inbox-layout:not(.has-selection) .inbox-detail { display: none; }.inbox-detail { min-height: 560px; padding: 18px; }.inbox-back-button { display: inline-block; }.inbox-detail-heading { gap: 14px; }.inbox-actions { width: 100%; }.inbox-actions .button { flex: 1; }.inbox-message { max-width: 90%; }.inbox-row { padding: 15px 13px; } }
+
+.audit-table-wrap { overflow-x: auto; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 16px; }
+.audit-table { width: 100%; border-collapse: collapse; min-width: 620px; }
+.audit-table th, .audit-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.audit-table th { color: var(--muted, #99a1b3); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+.audit-pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }

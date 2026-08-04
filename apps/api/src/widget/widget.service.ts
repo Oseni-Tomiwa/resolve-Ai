@@ -1,10 +1,13 @@
-import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inject, Injectable, NotFoundException, Optional, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs the service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { GroundedAnswerService, type PreparedGroundedAnswer } from '../knowledge/grounded-answer.service';
 import type { UpdateWidgetConfigurationDto, WidgetConversationDto, WidgetMessageDto, WidgetSessionDto } from './widget.dto';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 const sessionLifetimeMs = 24 * 60 * 60 * 1000;
 const maxMessagesPerSession = 100;
@@ -24,7 +27,7 @@ type OriginRequest = { headers?: { origin?: string; 'x-forwarded-for'?: string |
 @Injectable()
 export class WidgetService {
   private readonly rateLimits = new Map<string, number[]>();
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService, @Optional() private readonly audit?: AuditLogService) {}
 
   private async access(userId: string, workspaceId: string): Promise<void> {
     const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
@@ -60,12 +63,16 @@ export class WidgetService {
     if (allowedDomains?.some((domain): domain is null => domain === null)) throw new BadRequestException('Allowed domains must be exact origins such as https://support.example.com');
     const normalizedDomains = allowedDomains?.filter((domain): domain is string => domain !== null);
     const configuration = await this.db.widgetConfiguration.upsert({ where: { workspaceId }, create: { workspaceId, selectedAgentId, ...(dto as object), ...(normalizedDomains ? { allowedDomains: normalizedDomains } : {}) }, update: { ...dto, ...(normalizedDomains ? { allowedDomains: normalizedDomains } : {}), selectedAgentId } as never, include: { selectedAgent: { select: { name: true, description: true, greeting: true } } } });
+    const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
+    if (workspace) await this.audit?.record({ organizationId: workspace.organizationId, workspaceId, actorUserId: userId, action: 'widget.configuration_changed', targetType: 'widget_configuration', targetId: configuration.id, metadata: { enabled: configuration.enabled } });
     return { ...this.safeConfig(configuration), id: configuration.id, workspaceId, selectedAgentId: configuration.selectedAgentId, allowedDomains: configuration.allowedDomains };
   }
 
   async regenerate(userId: string, workspaceId: string) {
     await this.access(userId, workspaceId);
     const configuration = await this.db.widgetConfiguration.update({ where: { workspaceId }, data: { publicId: `w_${randomBytes(18).toString('base64url')}` }, include: { selectedAgent: { select: { name: true, description: true, greeting: true } } } });
+    const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });
+    if (workspace) await this.audit?.record({ organizationId: workspace.organizationId, workspaceId, actorUserId: userId, action: 'widget.public_id_regenerated', targetType: 'widget_configuration', targetId: configuration.id });
     return this.safeConfig(configuration);
   }
 
