@@ -9,10 +9,12 @@ function setup() {
     workspace: { findUnique: jest.fn().mockResolvedValue({ organizationId: 'org-1' }) },
     organizationMember: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN' }) },
     workspaceMember: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN' }) },
+    widgetConfiguration: { findFirst: jest.fn().mockResolvedValue(null) },
     aIAgent: { findFirst: jest.fn().mockResolvedValue(agent), create: jest.fn().mockResolvedValue(agent), count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([agent]), updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue(agent) },
     $transaction: jest.fn(async (action: unknown) => typeof action === 'function' ? (action as (client: typeof db) => Promise<unknown>)(db) : Promise.all(action as Promise<unknown>[])),
   };
-  return { db, service: new AgentsService(db as unknown as PrismaClient, { prepare: jest.fn(), completePrepared: jest.fn() } as never) };
+  const grounded = { prepare: jest.fn(), completePrepared: jest.fn() };
+  return { db, grounded, service: new AgentsService(db as unknown as PrismaClient, grounded as never) };
 }
 
 describe('AgentsService', () => {
@@ -62,5 +64,26 @@ describe('AgentsService', () => {
     // Assert
     expect(db.aIAgent.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ workspaceId: 'workspace-1', isDefault: true }), data: { isDefault: false } }));
     expect(db.aIAgent.update).toHaveBeenCalledWith({ where: { id: 'agent-2' }, data: { isDefault: true } });
+  });
+
+  it('returns a controlled insufficient-context response for a draft playground test', async () => {
+    // Arrange
+    const fixture = setup()
+    const service = fixture.service
+    const grounded = fixture.grounded
+    grounded.prepare.mockResolvedValue({ insufficient: true })
+    const result = await service.playground('user-1', 'workspace-1', 'agent-1', { question: 'Where is the policy?' });
+    // Assert
+    expect(result.metadata.insufficientContext).toBe(true);
+    expect(result.sources).toEqual([]);
+  });
+
+  it('blocks disabling an agent used by an active widget', async () => {
+    // Arrange
+    const { db, service } = setup();
+    db.aIAgent.findFirst.mockResolvedValue({ ...agent, isDefault: false });
+    db.widgetConfiguration.findFirst.mockResolvedValue({ id: 'widget-1' });
+    // Act / Assert
+    await expect(service.remove('user-1', 'workspace-1', 'agent-1')).rejects.toThrow(ConflictException);
   });
 });

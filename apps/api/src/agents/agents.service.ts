@@ -32,6 +32,11 @@ export class AgentsService {
     return access;
   }
 
+  private async assertNotSelectedByActiveWidget(workspaceId: string, agentId: string): Promise<void> {
+    const configuration = await this.db.widgetConfiguration.findFirst({ where: { workspaceId, selectedAgentId: agentId, enabled: true }, select: { id: true } });
+    if (configuration) throw new ConflictException('Disable or reassign the active widget before disabling this agent');
+  }
+
   private view(agent: { id: string; workspaceId: string; name: string; slug: string; description: string | null; instructions: string; greeting: string | null; fallbackMessage: string | null; model: string; temperature: number; topP: number; maxOutputTokens: number; requireCitations: boolean; groundedOnly: boolean; allowFollowUpQuestions: boolean; allowGeneralKnowledge: boolean; status: string; isDefault: boolean; publishedAt: Date | null; createdAt: Date; updatedAt: Date; knowledgeDocuments?: Array<{ knowledgeDocumentId: string }> }, includeConfiguration: boolean) {
     return { id: agent.id, workspaceId: agent.workspaceId, name: agent.name, slug: agent.slug, description: agent.description, greeting: agent.greeting, model: agent.model, status: agent.status, isDefault: agent.isDefault, publishedAt: agent.publishedAt, selectedDocumentCount: agent.knowledgeDocuments?.length ?? 0, createdAt: agent.createdAt, updatedAt: agent.updatedAt, ...(includeConfiguration ? { instructions: agent.instructions, fallbackMessage: agent.fallbackMessage, temperature: agent.temperature, topP: agent.topP, maxOutputTokens: agent.maxOutputTokens, requireCitations: agent.requireCitations, groundedOnly: agent.groundedOnly, allowFollowUpQuestions: agent.allowFollowUpQuestions, allowGeneralKnowledge: agent.allowGeneralKnowledge, documentIds: agent.knowledgeDocuments?.map((item) => item.knowledgeDocumentId) ?? [] } : {}) };
   }
@@ -122,6 +127,7 @@ export class AgentsService {
     if (!current) throw new NotFoundException('Agent not found');
     if (current.status === 'ACTIVE' && dto.status === 'DRAFT') throw new ConflictException('Published agents cannot be edited in place; duplicate the agent to create a draft');
     if (current.isDefault && dto.status && dto.status !== 'ACTIVE') throw new ConflictException('Choose another default agent before disabling this agent');
+    if (dto.status === 'DISABLED' || dto.status === 'ARCHIVED') await this.assertNotSelectedByActiveWidget(workspaceId, agentId);
     if (dto.isDefault === true && (dto.status ?? current.status) !== 'ACTIVE') throw new ConflictException('Only active agents can be the workspace default');
     const documentIds = dto.documentIds === undefined ? undefined : await this.validateDocumentIds(workspaceId, dto.documentIds);
     const data = { ...(dto.name === undefined ? {} : { name: dto.name.trim() }), ...(dto.slug === undefined ? {} : { slug: slugify(dto.slug) }), ...(dto.description === undefined ? {} : { description: trimNullable(dto.description) }), ...(dto.instructions === undefined ? {} : { instructions: dto.instructions.trim() }), ...(dto.greeting === undefined ? {} : { greeting: trimNullable(dto.greeting) }), ...(dto.fallbackMessage === undefined ? {} : { fallbackMessage: trimNullable(dto.fallbackMessage) }), ...(dto.model === undefined ? {} : { model: dto.model }), ...(dto.temperature === undefined ? {} : { temperature: dto.temperature }), ...(dto.topP === undefined ? {} : { topP: dto.topP }), ...(dto.maxOutputTokens === undefined ? {} : { maxOutputTokens: dto.maxOutputTokens }), ...(dto.requireCitations === undefined ? {} : { requireCitations: dto.requireCitations }), ...(dto.groundedOnly === undefined ? {} : { groundedOnly: dto.groundedOnly }), ...(dto.allowFollowUpQuestions === undefined ? {} : { allowFollowUpQuestions: dto.allowFollowUpQuestions }), ...(dto.allowGeneralKnowledge === undefined ? {} : { allowGeneralKnowledge: dto.allowGeneralKnowledge }), ...(dto.status === undefined ? {} : { status: dto.status }), ...(dto.isDefault === undefined ? {} : { isDefault: dto.isDefault }) };
@@ -152,6 +158,7 @@ export class AgentsService {
     const agent = await this.db.aIAgent.findFirst({ where: { id: agentId, workspaceId, deletedAt: null } });
     if (!agent) throw new NotFoundException('Agent not found');
     if (agent.isDefault) throw new ConflictException('Choose another default agent before deleting this agent');
+    await this.assertNotSelectedByActiveWidget(workspaceId, agentId);
     await this.db.aIAgent.update({ where: { id: agentId }, data: { deletedAt: new Date(), status: 'DISABLED' } });
   }
 
@@ -159,8 +166,12 @@ export class AgentsService {
     await this.requireManager(userId, workspaceId);
     const current = await this.db.aIAgent.findFirst({ where: { id: agentId, workspaceId, deletedAt: null }, include: agentDocumentInclude });
     if (!current) throw new NotFoundException('Agent not found');
-    const name = `${current.name} Copy`;
-    return this.create(userId, workspaceId, { name, slug: `${current.slug}-copy`, description: current.description ?? undefined, instructions: current.instructions, greeting: current.greeting ?? undefined, fallbackMessage: current.fallbackMessage ?? undefined, model: current.model, temperature: current.temperature, topP: current.topP, maxOutputTokens: current.maxOutputTokens, requireCitations: current.requireCitations, groundedOnly: current.groundedOnly, allowFollowUpQuestions: current.allowFollowUpQuestions, allowGeneralKnowledge: current.allowGeneralKnowledge, documentIds: current.knowledgeDocuments.map((item) => item.knowledgeDocumentId), isDefault: false });
+    const prefix = current.name + " Copy";
+    const copyCount = await this.db.aIAgent.count({ where: { workspaceId, deletedAt: null, name: { startsWith: prefix } } });
+    const suffix = copyCount > 0 ? " " + (copyCount + 1) : "";
+    const name = prefix + suffix;
+    const slug = current.slug + "-copy" + (copyCount > 0 ? "-" + (copyCount + 1) : "");
+    return this.create(userId, workspaceId, { name, slug, description: current.description ?? undefined, instructions: current.instructions, greeting: current.greeting ?? undefined, fallbackMessage: current.fallbackMessage ?? undefined, model: current.model, temperature: current.temperature, topP: current.topP, maxOutputTokens: current.maxOutputTokens, requireCitations: current.requireCitations, groundedOnly: current.groundedOnly, allowFollowUpQuestions: current.allowFollowUpQuestions, allowGeneralKnowledge: current.allowGeneralKnowledge, documentIds: current.knowledgeDocuments.map((item) => item.knowledgeDocumentId), isDefault: false });
   }
 
   async publish(userId: string, workspaceId: string, agentId: string) {
@@ -177,7 +188,8 @@ export class AgentsService {
     const current = await this.db.aIAgent.findFirst({ where: { id: agentId, workspaceId, deletedAt: null } });
     if (!current) throw new NotFoundException('Agent not found');
     if (current.isDefault) throw new ConflictException('Choose another default agent before archiving this agent');
-    return this.db.aIAgent.update({ where: { id: agentId }, data: { status: 'ARCHIVED', deletedAt: new Date() } });
+    await this.assertNotSelectedByActiveWidget(workspaceId, agentId);
+    return this.db.aIAgent.update({ where: { id: agentId }, data: { status: 'ARCHIVED' } });
   }
 
   async selectableDocuments(userId: string, workspaceId: string) {

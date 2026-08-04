@@ -67,7 +67,7 @@ export function AgentEditor({ agentId }: { agentId?: string }) {
   if (!canManage) return <section className="agent-page"><div className="dashboard-error" role="alert">You do not have permission to edit workspace agents.</div></section>;
 
   return <section className="agent-page agent-studio-page">
-    <div className="agent-heading agent-studio-heading"><div><Link className="text-link" href="/dashboard/ai-agent">← All agents</Link><p className="eyebrow">Agent configuration studio</p><h2>{agentId ? agent.name || 'Edit agent' : 'Create an agent'}</h2><p>Shape a grounded support voice with clear behavior, safe defaults, and a live preview.</p></div><span className={`agent-badge ${agent.status.toLowerCase()}`}>{agent.status === 'ACTIVE' ? 'Published' : agent.status === 'DISABLED' ? 'Disabled' : 'Draft'}</span></div>
+    <div className="agent-heading agent-studio-heading"><div><Link className="text-link" href="/dashboard/ai-agent">← All agents</Link><p className="eyebrow">Agent configuration studio</p><h2>{agentId ? agent.name || 'Edit agent' : 'Create an agent'}</h2><p>Shape a grounded support voice with clear behavior, safe defaults, and a live preview.</p></div><Link className="button button-ghost button-small" href="/dashboard/ai-agent/playground">Open Playground <span>↗</span></Link><span className={`agent-badge ${agent.status.toLowerCase()}`}>{agent.status === 'ACTIVE' ? 'Published' : agent.status === 'DISABLED' ? 'Disabled' : 'Draft'}</span></div>
     {error && <div className="dashboard-error" role="alert">{error}</div>}
     <form className="agent-editor" onSubmit={(event) => void submit(event)}>
       <div className="agent-editor-layout"><div className="agent-editor-fields">
