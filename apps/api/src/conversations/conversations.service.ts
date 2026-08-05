@@ -8,6 +8,9 @@ import { WorkspaceAccessService } from '../workspace-access/workspace-access.ser
 // Agent service is injected by the ConversationsModule.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AgentsService } from '../agents/agents.service';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { WebhookEventsService } from '../webhooks/webhook-events.service';
 import type { ConversationDetailQueryDto, ConversationListQueryDto, CreateConversationDto, StreamMessageDto, UpdateConversationDto } from './dto';
 // Nest dependency injection needs this service constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -31,14 +34,14 @@ const titleFromMessage = (content: string): string => {
 
 @Injectable()
 export class ConversationsService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly workspaceAccess: WorkspaceAccessService, private readonly grounded: GroundedAnswerService, private readonly agents: AgentsService, @Optional() private readonly billingUsage?: BillingUsageService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly workspaceAccess: WorkspaceAccessService, private readonly grounded: GroundedAnswerService, private readonly agents: AgentsService, @Optional() private readonly billingUsage?: BillingUsageService, @Optional() private readonly events?: WebhookEventsService) {}
 
   async create(userId: string, workspaceId: string, dto: CreateConversationDto) {
     const access = await this.workspaceAccess.getAccess(userId, workspaceId);
     if (!canWrite(access.organizationRole, access.workspaceRole)) throw new ForbiddenException('Viewers cannot create conversations');
     await this.billingUsage?.assertCanConsume(workspaceId, 'CONVERSATIONS');
     const agent = dto.agentId ? await this.agents.requireActiveForConversation(userId, workspaceId, dto.agentId) : await this.agents.ensureDefault(workspaceId, userId);
-    return this.db.aIConversation.create({ data: { workspaceId, createdByUserId: userId, agentId: agent.id, title: dto.title?.trim() || 'New conversation' }, select: { id: true, workspaceId: true, title: true, status: true, agent: { select: { id: true, name: true, description: true, greeting: true } }, createdAt: true, updatedAt: true, lastMessageAt: true } });
+    const created = await this.db.aIConversation.create({ data: { workspaceId, createdByUserId: userId, agentId: agent.id, title: dto.title?.trim() || 'New conversation' }, select: { id: true, workspaceId: true, title: true, status: true, agent: { select: { id: true, name: true, description: true, greeting: true } }, createdAt: true, updatedAt: true, lastMessageAt: true } }); void this.events?.publish(workspaceId, 'conversation.created', { conversationId: created.id, userId, agentId: agent.id }, 'conversation.created:' + workspaceId + ':' + created.id); return created;
   }
 
   async list(userId: string, workspaceId: string, query: ConversationListQueryDto) {

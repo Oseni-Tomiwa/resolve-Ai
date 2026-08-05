@@ -49,13 +49,19 @@ export const envSchema = z.object({
   STRIPE_CANCEL_URL: z.string().url().optional(),
   STRIPE_PORTAL_RETURN_URL: z.string().url().optional(),
   STRIPE_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().positive().default(300),
-  EMAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+  EMAIL_PROVIDER: z.enum(['console', 'smtp', 'resend', 'test']).default('console'),
+  EMAIL_API_KEY: z.string().optional(),
+  EMAIL_API_URL: z.string().url().default('https://api.resend.com/emails'),
+  EMAIL_REPLY_TO: z.string().email().optional(),
   EMAIL_FROM_NAME: z.string().default('ResolveAI'),
   EMAIL_FROM_ADDRESS: z.string().email().default('no-reply@example.com'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
+  WEBHOOK_ENCRYPTION_KEY: z.string().min(32).optional(),
+  WEBHOOK_DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().max(120000).default(10000),
+  WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().positive().max(10).default(5),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   SENTRY_DSN: z.string().url().optional(),
   RELEASE: z.string().optional(),
@@ -125,6 +131,9 @@ export const validateRuntimeEnv = (input: Record<string, string | undefined>): R
     if (!env.STRIPE_PRICE_PRO || !env.STRIPE_PRICE_BUSINESS) errors.push('Stripe billing requires STRIPE_PRICE_PRO and STRIPE_PRICE_BUSINESS');
   }
   if (env.EMAIL_PROVIDER === 'smtp' && (!env.SMTP_HOST || !env.SMTP_PORT)) errors.push('SMTP email requires SMTP_HOST and SMTP_PORT');
+  if (env.NODE_ENV === 'production' && (env.EMAIL_PROVIDER === 'console' || env.EMAIL_PROVIDER === 'test')) errors.push('Console and test email providers are not allowed in production');
+  if (env.EMAIL_PROVIDER === 'resend' && !env.EMAIL_API_KEY) errors.push('Resend email requires EMAIL_API_KEY');
+  if (env.NODE_ENV === 'production' && !env.WEBHOOK_ENCRYPTION_KEY) errors.push('WEBHOOK_ENCRYPTION_KEY is required in production');
   if (errors.length > 0) throw new Error(`Production environment validation failed: ${errors.join('; ')}`);
   return { ...env, ...ai };
 };

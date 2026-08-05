@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpException, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ApiKeyScopeGuard, JwtOrApiKeyGuard, RequireApiKeyScope } from '../api-keys/api-key-access';
 // Nest dependency injection and validation need these constructors at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { ConversationsService } from './conversations.service';
@@ -10,17 +11,16 @@ import { ConversationDetailQueryDto, ConversationListQueryDto, CreateConversatio
 type RequestWithUser = { user: { sub: string } };
 
 @Controller('workspaces/:workspaceId/ai/conversations')
-@UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private readonly service: ConversationsService) {}
 
-  @Post() create(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Body() dto: CreateConversationDto) { return this.service.create(request.user.sub, workspaceId, dto).then((data) => ({ success: true, message: 'Conversation created', data })); }
-  @Get() list(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Query() query: ConversationListQueryDto) { return this.service.list(request.user.sub, workspaceId, query).then((data) => ({ success: true, message: 'Conversations loaded', data })); }
-  @Get(':conversationId') detail(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string, @Query() query: ConversationDetailQueryDto) { return this.service.detail(request.user.sub, workspaceId, conversationId, query).then((data) => ({ success: true, message: 'Conversation loaded', data })); }
-  @Patch(':conversationId') rename(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string, @Body() dto: UpdateConversationDto) { return this.service.rename(request.user.sub, workspaceId, conversationId, dto).then((data) => ({ success: true, message: 'Conversation renamed', data })); }
-  @Delete(':conversationId') remove(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string) { return this.service.remove(request.user.sub, workspaceId, conversationId).then(() => ({ success: true, message: 'Conversation deleted', data: null })); }
+  @Post() @UseGuards(JwtAuthGuard) create(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Body() dto: CreateConversationDto) { return this.service.create(request.user.sub, workspaceId, dto).then((data) => ({ success: true, message: 'Conversation created', data })); }
+  @Get() @UseGuards(JwtOrApiKeyGuard, ApiKeyScopeGuard) @RequireApiKeyScope('conversations:read') list(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Query() query: ConversationListQueryDto) { return this.service.list(request.user.sub, workspaceId, query).then((data) => ({ success: true, message: 'Conversations loaded', data })); }
+  @Get(':conversationId') @UseGuards(JwtOrApiKeyGuard, ApiKeyScopeGuard) @RequireApiKeyScope('conversations:read') detail(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string, @Query() query: ConversationDetailQueryDto) { return this.service.detail(request.user.sub, workspaceId, conversationId, query).then((data) => ({ success: true, message: 'Conversation loaded', data })); }
+  @Patch(':conversationId') @UseGuards(JwtAuthGuard) rename(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string, @Body() dto: UpdateConversationDto) { return this.service.rename(request.user.sub, workspaceId, conversationId, dto).then((data) => ({ success: true, message: 'Conversation renamed', data })); }
+  @Delete(':conversationId') @UseGuards(JwtAuthGuard) remove(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string) { return this.service.remove(request.user.sub, workspaceId, conversationId).then(() => ({ success: true, message: 'Conversation deleted', data: null })); }
 
-  @Post(':conversationId/messages/stream')
+  @Post(':conversationId/messages/stream') @UseGuards(JwtAuthGuard)
   async stream(@Req() request: RequestWithUser, @Param('workspaceId') workspaceId: string, @Param('conversationId') conversationId: string, @Body() dto: StreamMessageDto, @Res() response: Response): Promise<void> {
     response.status(200).set({ 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     const abort = new AbortController();

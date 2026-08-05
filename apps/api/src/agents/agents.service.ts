@@ -4,6 +4,9 @@ import type { Prisma, PrismaClient } from '@resolveai/database';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { GroundedAnswerService } from '../knowledge/grounded-answer.service';
 import { defaultAgent, defaultAgentMaxOutputTokens, defaultAgentModel, defaultAgentTemperature } from './agent.config';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { WebhookEventsService } from '../webhooks/webhook-events.service';
 import type { AgentListQueryDto, AgentPlaygroundDto, CreateAgentDto, UpdateAgentDto } from './dto';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -16,7 +19,7 @@ const agentDocumentInclude = { knowledgeDocuments: { select: { knowledgeDocument
 
 @Injectable()
 export class AgentsService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService, @Optional() private readonly audit?: AuditLogService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly grounded: GroundedAnswerService, @Optional() private readonly audit?: AuditLogService, @Optional() private readonly events?: WebhookEventsService) {}
 
   private async access(userId: string, workspaceId: string) {
     const workspace = await this.db.workspace.findUnique({ where: { id: workspaceId }, select: { organizationId: true } });

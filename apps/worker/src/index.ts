@@ -2,12 +2,14 @@ import { createServer } from 'node:http';
 import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { prisma } from '@resolveai/database';
-import { LocalStorage } from '@resolveai/storage';
+import { createStorageFromEnv } from '@resolveai/storage';
 import { loadEmbeddingEnv, loadRootEnv, validateRuntimeEnv } from '@resolveai/config';
 import { chunkText } from './chunking.js';
 import { createProductionEmbeddingProvider, embedDocumentChunks } from './embedding.js';
 import { extractText } from './processing.js';
 import { processingErrorCategory } from './error-category.js';
+import { deliverWebhook, enqueueWebhookEvent } from './webhook-delivery.js';
+import { deliverEmail } from './email-delivery.js';
 
 loadRootEnv();
 const runtimeEnv = validateRuntimeEnv(process.env);
@@ -15,8 +17,10 @@ const writeWorkerLog = (event: Record<string, unknown>): void => { const safe = 
 const log = (line: string): void => { try { writeWorkerLog(JSON.parse(line) as Record<string, unknown>); } catch { writeWorkerLog({ event: 'worker.log_parse_failed' }); } };
 
 const queueName = 'knowledge-processing';
+const webhookQueueName = 'webhook-delivery';
+const emailQueueName = 'email-delivery';
 const connection = { url: runtimeEnv.REDIS_URL };
-const storage = new LocalStorage(runtimeEnv.KNOWLEDGE_STORAGE_DIR);
+const storage = createStorageFromEnv(process.env);
 
 const withTimeout = <T>(task: Promise<T>, timeoutMs: number): Promise<T> => new Promise<T>((resolve, reject) => { const timer = setTimeout(() => reject(new Error('WORKER_JOB_TIMEOUT')), timeoutMs); task.then((value) => { clearTimeout(timer); resolve(value); }, (error: unknown) => { clearTimeout(timer); reject(error); }); });
 
@@ -58,14 +62,15 @@ async function processDocument(documentId: string, workspaceId: string): Promise
     log(JSON.stringify({ event: 'knowledge.embedding_generation_completed', documentId, workspaceId, provider: embeddingProvider.provider, model: embeddingProvider.model, dimensions: embeddingProvider.dimensions, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'READY', processingError: null } });
     log(JSON.stringify({ event: 'knowledge.document_ready', documentId, workspaceId, chunkCount: chunks.length, embeddedChunkCount: result.embeddedChunkCount, skippedChunkCount: result.skippedChunkCount }));
+    void enqueueWebhookEvent(prisma, workspaceId, 'document.ready', { documentId, status: 'READY', chunkCount: chunks.length }, 'document.ready:' + document.id).catch(() => log(JSON.stringify({ event: 'webhook.event_enqueue_failed', category: 'REDIS_OR_DATABASE_UNAVAILABLE' })));
   } catch (error) {
     const category = processingErrorCategory(error);
     await prisma.knowledgeDocument.updateMany({ where: { id: document.id, workspaceId, deletedAt: null }, data: { status: 'FAILED', processingError: category } });
     log(JSON.stringify({ event: 'knowledge.document_failed', documentId, workspaceId, category }));
+    void enqueueWebhookEvent(prisma, workspaceId, 'document.failed', { documentId, status: 'FAILED', errorCategory: category }, 'document.failed:' + document.id + ':' + category).catch(() => log(JSON.stringify({ event: 'webhook.event_enqueue_failed', category: 'REDIS_OR_DATABASE_UNAVAILABLE' })));
     throw error;
   }
 }
-
 async function recoverInterruptedDocuments(): Promise<void> {
   const cutoff = new Date(Date.now() - 15 * 60 * 1000);
   await prisma.knowledgeDocument.updateMany({
@@ -79,6 +84,10 @@ const worker = new Worker(queueName, async (job) => {
   await withTimeout(processDocument(documentId, workspaceId), runtimeEnv.WORKER_JOB_TIMEOUT_MS);
 }, { connection, concurrency: runtimeEnv.WORKER_CONCURRENCY });
 
+const emailWorker = new Worker(emailQueueName, async (job) => { await deliverEmail((job.data as { message: Parameters<typeof deliverEmail>[0] }).message); }, { connection, concurrency: 4 });
+
+const webhookWorker = new Worker(webhookQueueName, async (job) => { await deliverWebhook(prisma, (job.data as { deliveryId: string }).deliveryId); }, { connection, concurrency: 4 });
+
 const readinessRedis = new Redis(runtimeEnv.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false });
 const healthServer = createServer(async (request, response) => {
   response.setHeader('Content-Type', 'application/json');
@@ -88,17 +97,19 @@ const healthServer = createServer(async (request, response) => {
     prisma.$queryRawUnsafe('SELECT 1').then(() => 'ok').catch(() => 'unavailable'),
     (async () => { try { if (readinessRedis.status === 'wait') await readinessRedis.connect(); await readinessRedis.ping(); return 'ok'; } catch { return 'unavailable'; } })(),
   ]);
-  const ready = worker.isRunning() && database === 'ok' && redis === 'ok';
+  const ready = worker.isRunning() && webhookWorker.isRunning() && emailWorker.isRunning() && database === 'ok' && redis === 'ok';
   response.statusCode = ready ? 200 : 503;
-  response.end(JSON.stringify({ success: ready, data: { status: ready ? 'ready' : 'degraded', worker: worker.isRunning() ? 'ok' : 'unavailable', database, redis } }));
+  response.end(JSON.stringify({ success: ready, data: { status: ready ? 'ready' : 'degraded', worker: worker.isRunning() && webhookWorker.isRunning() && emailWorker.isRunning() ? 'ok' : 'unavailable', database, redis } }));
 });
 healthServer.listen(runtimeEnv.WORKER_PORT, () => log(JSON.stringify({ event: 'knowledge.worker_health_ready', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, port: runtimeEnv.WORKER_PORT })));
 
+emailWorker.on('failed', (job, error) => log(JSON.stringify({ event: 'email.delivery_failed', jobId: job?.id, category: error instanceof Error ? error.message.slice(0, 80) : 'DELIVERY_ERROR' })));
+webhookWorker.on('failed', (job, error) => log(JSON.stringify({ event: 'webhook.delivery_failed', jobId: job?.id, category: error instanceof Error ? error.message.slice(0, 80) : 'DELIVERY_ERROR' })));
 worker.on('failed', (job, error) => log(JSON.stringify({ event: 'knowledge.job_failed', jobId: job?.id, category: processingErrorCategory(error) })));
 worker.on('error', (error) => log(JSON.stringify({ event: 'knowledge.worker_error', category: processingErrorCategory(error) })));
 void recoverInterruptedDocuments().catch(() => log(JSON.stringify({ event: 'knowledge.recovery_failed', category: 'DATABASE_UNAVAILABLE' })));
 log(JSON.stringify({ event: 'knowledge.worker_ready', queue: queueName }));
 
-async function shutdown(signal: string): Promise<void> { log(JSON.stringify({ event: 'knowledge.worker_shutdown', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, signal })); await new Promise<void>((resolve) => healthServer.close(() => resolve())); await worker.close(); await readinessRedis.quit().catch(() => undefined); await prisma.$disconnect(); }
+async function shutdown(signal: string): Promise<void> { log(JSON.stringify({ event: 'knowledge.worker_shutdown', service: 'resolveai-worker', environment: runtimeEnv.NODE_ENV, signal })); await new Promise<void>((resolve) => healthServer.close(() => resolve())); await worker.close(); await webhookWorker.close(); await emailWorker.close(); await readinessRedis.quit().catch(() => undefined); await prisma.$disconnect(); }
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
