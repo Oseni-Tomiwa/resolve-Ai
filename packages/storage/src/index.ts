@@ -35,6 +35,9 @@ export class S3Storage implements Storage {
 }
 
 export function createStorageFromEnv(env: Record<string, string | undefined> = process.env): Storage {
+  if (env.NODE_ENV === 'production' && env.STORAGE_PROVIDER !== 's3') {
+    throw new Error('Production storage requires STORAGE_PROVIDER=s3');
+  }
   if (env.STORAGE_PROVIDER !== 's3') return new LocalStorage(env.KNOWLEDGE_STORAGE_DIR);
   if (!env.S3_BUCKET || !env.S3_REGION || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) throw new Error('S3 storage is not configured');
   return new S3Storage({ endpoint: env.S3_ENDPOINT, region: env.S3_REGION, bucket: env.S3_BUCKET, accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY });

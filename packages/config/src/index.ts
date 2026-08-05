@@ -125,6 +125,8 @@ export const validateRuntimeEnv = (input: Record<string, string | undefined>): R
     } catch { errors.push('CORS_ALLOWED_ORIGINS contains an invalid origin'); }
   }
   if (env.STORAGE_PROVIDER === 's3' && (!env.S3_BUCKET || !env.S3_REGION || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)) errors.push('S3 storage requires bucket, region, access key, and secret key configuration');
+  if (env.STORAGE_PROVIDER !== 's3') errors.push('STORAGE_PROVIDER must be s3 in production; local filesystem storage is not supported');
+  if (env.BILLING_PROVIDER !== 'stripe') errors.push('BILLING_PROVIDER must be stripe in production; mock billing is not supported');
   if (env.BILLING_PROVIDER === 'stripe') {
     if (!env.STRIPE_SECRET_KEY) errors.push('Stripe billing requires STRIPE_SECRET_KEY');
     if (!env.STRIPE_WEBHOOK_SECRET) errors.push('Stripe billing requires STRIPE_WEBHOOK_SECRET');
