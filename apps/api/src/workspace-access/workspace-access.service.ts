@@ -4,6 +4,9 @@ import type { PrismaClient } from '@resolveai/database';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { EmailService } from './email.service';
+// Nest dependency injection needs this constructor at runtime.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { WebhookEventsService } from '../webhooks/webhook-events.service';
 import type { CreateInvitationDto, UpdateMemberRoleDto } from './dto';
 // Nest dependency injection needs this constructor at runtime.
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -21,7 +24,7 @@ type Access = { organizationId: string; organizationRole: string; workspaceRole:
 
 @Injectable()
 export class WorkspaceAccessService {
-  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly email: EmailService, @Optional() private readonly audit?: AuditLogService) {}
+  constructor(@Inject('PRISMA') private readonly db: PrismaClient, private readonly email: EmailService, @Optional() private readonly audit?: AuditLogService, @Optional() private readonly events?: WebhookEventsService) {}
 
   async getAccess(userId: string, workspaceId: string): Promise<Access> {
     const workspace = await this.db.workspace.findFirst({ where: { id: workspaceId }, select: { organizationId: true } });
@@ -56,6 +59,7 @@ export class WorkspaceAccessService {
     const invitationUrl = `${process.env.WEB_URL ?? 'http://localhost:3000'}/invite/${token}`;
     await this.email.sendInvitation({ invitationUrl, email, role: invitation.role, expiresAt, workspaceName: invitation.workspace.name, organizationName: invitation.organization.name, inviterName: `${invitation.invitedBy.firstName} ${invitation.invitedBy.lastName}` });
     await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.invited', targetType: 'workspace_invitation', targetId: invitation.id, metadata: { role: invitation.role }, });
+    void this.events?.publish(workspaceId, 'member.invited', { invitationId: invitation.id, invitedByUserId: userId, role: invitation.role });
     return { ...invitation, localInvitationUrl: process.env.NODE_ENV === 'production' ? undefined : invitationUrl };
   }
 
@@ -145,5 +149,6 @@ export class WorkspaceAccessService {
     if (member.role === 'ADMIN' && access.organizationRole === 'MEMBER') { const admins = await this.db.workspaceMember.count({ where: { workspaceId, role: 'ADMIN' } }); if (admins <= 1) throw new ForbiddenException('The final workspace admin cannot be removed'); }
     await this.db.workspaceMember.delete({ where: { workspaceId_userId: { workspaceId, userId: memberId } } });
     await this.audit?.record({ organizationId: access.organizationId, workspaceId, actorUserId: userId, action: 'member.removed', targetType: 'workspace_member', targetId: memberId });
+    void this.events?.publish(workspaceId, 'member.removed', { memberId, removedByUserId: userId });
   }
 }

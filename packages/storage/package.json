@@ -16,7 +16,7 @@
     "build": "tsc -p ./tsconfig.build.json",
     "typecheck": "tsc --noEmit -p ./tsconfig.json",
     "lint": "pnpm exec eslint src",
-    "test": "echo 'storage tests pending'"
+    "test": "pnpm build && node scripts/storage.test.cjs"
   },
   "devDependencies": {
     "@resolveai/eslint-config": "workspace:*",

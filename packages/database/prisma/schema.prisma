@@ -736,6 +736,16 @@ model OutboundWebhook {
   @@unique([workspaceId, name])
 }
 
+model WebhookEvent {
+  id String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  eventKey String @unique
+  eventType String
+  payload Json
+  createdAt DateTime @default(now())
+  @@index([workspaceId, createdAt])
+}
+
 model WebhookDelivery {
   id String @id @default(uuid()) @db.Uuid
   webhookId String @db.Uuid
@@ -747,6 +757,9 @@ model WebhookDelivery {
   attempts Int @default(0)
   nextAttemptAt DateTime?
   responseStatus Int?
+  responseBody String?
+  durationMs Int?
+  lastAttemptAt DateTime?
   errorCategory String?
   deliveredAt DateTime?
   createdAt DateTime @default(now())
