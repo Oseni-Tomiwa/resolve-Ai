@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": { ".": { "types": "./src/index.ts", "require": "./dist/index.js", "default": "./dist/index.js" } },
-  "scripts": { "generate": "node scripts/prisma.cjs generate", "migrate": "node scripts/prisma.cjs migrate dev", "migrate:deploy": "node scripts/prisma.cjs migrate deploy", "migrate:status": "node scripts/prisma.cjs migrate status", "seed:dev": "node scripts/seed-dev.cjs", "build": "tsc -p ./tsconfig.build.json", "lint": "pnpm exec eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'database tests pending'" },
+  "scripts": { "generate": "node scripts/prisma.cjs generate", "validate": "node scripts/prisma.cjs validate", "migrate": "node scripts/prisma.cjs migrate dev", "migrate:deploy": "node scripts/prisma.cjs migrate deploy", "migrate:status": "node scripts/prisma.cjs migrate status", "seed:dev": "node scripts/seed-dev.cjs", "build": "tsc -p ./tsconfig.build.json", "lint": "pnpm exec eslint src", "typecheck": "tsc --noEmit -p ./tsconfig.json", "test": "echo 'database tests pending'" },
   "dependencies": { "@prisma/client": "^6.1.0", "@resolveai/config": "workspace:*", "dotenv": "^16.4.7" },
   "devDependencies": { "@resolveai/eslint-config": "workspace:*", "@types/node": "^22.10.5", "eslint": "^9.17.0", "prisma": "^6.1.0", "typescript": "^5.7.2" }
 }

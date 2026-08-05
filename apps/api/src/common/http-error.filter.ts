@@ -1,7 +1,7 @@
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { writeSafeLog } from '@resolveai/shared';
-import { MonitoringService } from './monitoring.service';
+import type { MonitoringService } from './monitoring.service';
 
 type ErrorBody = { statusCode?: number; message?: string | string[]; error?: string; code?: string };
 

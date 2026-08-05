@@ -121,7 +121,9 @@ Rotate OpenAI, database, Redis, JWT, SMTP, and billing credentials through the s
 
 ## Current limitations
 
-- S3-compatible storage configuration is prepared but the provider implementation remains local-only.
+- Production launch still requires operator-owned Railway/provider setup, DNS, TLS, backups, legal approval, and live Stripe/email/OpenAI verification.
+- S3-compatible storage is implemented and production startup rejects local fallback, but bucket policy, encryption, versioning, lifecycle, and credentials must be configured by the operator.
 - Billing uses Stripe Checkout, Customer Portal, and signed webhooks when `BILLING_PROVIDER=stripe`; local development defaults to the deterministic mock provider when `BILLING_PROVIDER=mock`.
 - Worker readiness is an HTTP health server, not a separate orchestration control plane.
+- The read-only launch smoke checks are available with `pnpm smoke:production`; they do not create users, upload data, or call paid providers.
 - CI validates the Prisma schema and application checks; it does not perform live provider calls or deployment.
