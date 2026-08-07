@@ -2,7 +2,7 @@
   "name": "resolveai",
   "private": true,
   "packageManager": "pnpm@9.15.0",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22 <25" },
   "scripts": { "dev": "turbo dev", "build": "turbo build", "lint": "turbo lint", "format": "prettier --check .", "format:write": "prettier --write .", "typecheck": "turbo typecheck", "test": "turbo test", "smoke:production": "node scripts/production-smoke.cjs", "db:generate": "pnpm --filter @resolveai/database generate", "db:migrate": "pnpm --filter @resolveai/database migrate", "db:migrate:deploy": "pnpm --filter @resolveai/database migrate:deploy", "db:migrate:status": "pnpm --filter @resolveai/database migrate:status", "db:seed:dev": "pnpm --filter @resolveai/database seed:dev" },
   "devDependencies": { "eslint": "^9.17.0", "prettier": "^3.4.2", "turbo": "^2.3.3", "typescript": "^5.7.2" }
 }
